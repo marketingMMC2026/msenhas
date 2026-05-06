@@ -8,24 +8,25 @@ import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
+const normalizeMemberRole = (role) => role === 'admin' ? 'manager' : (role || 'member');
+const roleLabel = (role) => normalizeMemberRole(role) === 'manager' ? 'Gestor do grupo' : 'Membro';
+
 const GroupMembersModal = ({ open, onOpenChange, group }) => {
   const { logAction } = useAuditLog();
   const { toast } = useToast();
   const { user } = useAuth();
-  
+
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(false);
-  
-  // Add Member State
-  const [isAdding, setIsAdding] = useState(false);
   const [availableUsers, setAvailableUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState('');
+  const [selectedRole, setSelectedRole] = useState('member');
   const [addingLoading, setAddingLoading] = useState(false);
 
-  // Confirm Actions State
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [actionType, setActionType] = useState(null); // 'remove' | 'role'
+  const [actionType, setActionType] = useState(null);
   const [targetMember, setTargetMember] = useState(null);
+  const [nextRole, setNextRole] = useState(null);
   const [processingId, setProcessingId] = useState(null);
 
   useEffect(() => {
@@ -45,7 +46,7 @@ const GroupMembersModal = ({ open, onOpenChange, group }) => {
         .order('added_at', { ascending: false });
 
       if (error) throw error;
-      setMembers(data || []);
+      setMembers((data || []).map(member => ({ ...member, role: normalizeMemberRole(member.role) })));
     } catch (err) {
       console.error(err);
       toast({ variant: "destructive", title: "Erro ao buscar membros" });
@@ -57,7 +58,7 @@ const GroupMembersModal = ({ open, onOpenChange, group }) => {
   const fetchAvailableUsers = async () => {
     const { data } = await supabase
       .from('profiles')
-      .select('id, email')
+      .select('id, email, full_name')
       .eq('is_active', true)
       .order('email');
     setAvailableUsers(data || []);
@@ -65,10 +66,10 @@ const GroupMembersModal = ({ open, onOpenChange, group }) => {
 
   const handleAddMember = async () => {
     if (!selectedUser) return;
-    
+
     if (!user?.id) {
-        toast({ variant: "destructive", title: "Erro de sessão", description: "Sessão ainda carregando. Tente novamente." });
-        return;
+      toast({ variant: "destructive", title: "Erro de sessão", description: "Sessão ainda carregando. Tente novamente." });
+      return;
     }
 
     try {
@@ -78,21 +79,21 @@ const GroupMembersModal = ({ open, onOpenChange, group }) => {
         .insert({
           group_id: group.id,
           user_id: selectedUser,
-          role: 'member'
+          role: selectedRole
         });
 
       if (error) throw error;
 
-      await logAction('add_group_member', 'group', group.id, { user_id: selectedUser });
+      await logAction('add_group_member', 'group', group.id, { user_id: selectedUser, role: selectedRole });
       toast({ title: "Membro adicionado" });
-      setIsAdding(false);
       setSelectedUser('');
+      setSelectedRole('member');
       fetchMembers();
     } catch (err) {
       console.error('Error adding member:', {
-          status: err.code,
-          code: err.code,
-          message: err.message
+        status: err.code,
+        code: err.code,
+        message: err.message
       });
       toast({ variant: "destructive", title: "Erro ao adicionar membro", description: err.message });
     } finally {
@@ -100,17 +101,18 @@ const GroupMembersModal = ({ open, onOpenChange, group }) => {
     }
   };
 
-  const confirmAction = (type, member) => {
+  const confirmAction = (type, member, role = null) => {
     setActionType(type);
     setTargetMember(member);
+    setNextRole(role);
     setConfirmOpen(true);
   };
 
   const handleExecuteAction = async () => {
     if (!targetMember) return;
-    
+
     setProcessingId(targetMember.id);
-    setConfirmOpen(false); // Close dialog, show loading in list if needed
+    setConfirmOpen(false);
 
     try {
       if (actionType === 'remove') {
@@ -122,25 +124,24 @@ const GroupMembersModal = ({ open, onOpenChange, group }) => {
         if (error) throw error;
         await logAction('remove_group_member', 'group', group.id, { member_id: targetMember.id });
         toast({ title: "Membro removido" });
-      } 
-      else if (actionType === 'toggle_role') {
-        const newRole = targetMember.role === 'admin' ? 'member' : 'admin';
+      } else if (actionType === 'role') {
         const { error } = await supabase
           .from('group_members')
-          .update({ role: newRole })
+          .update({ role: nextRole })
           .eq('id', targetMember.id);
 
         if (error) throw error;
-        await logAction('update_member_role', 'group', group.id, { member_id: targetMember.id, role: newRole });
-        toast({ title: "Permissao atualizada" });
+        await logAction('update_member_role', 'group', group.id, { member_id: targetMember.id, role: nextRole });
+        toast({ title: "Permissão atualizada" });
       }
-      
+
       fetchMembers();
     } catch (err) {
-      toast({ variant: "destructive", title: "Acao falhou", description: err.message });
+      toast({ variant: "destructive", title: "Ação falhou", description: err.message });
     } finally {
       setProcessingId(null);
       setTargetMember(null);
+      setNextRole(null);
     }
   };
 
@@ -155,7 +156,7 @@ const GroupMembersModal = ({ open, onOpenChange, group }) => {
             <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
               <div>
                 <Dialog.Title className="text-xl font-bold text-gray-900">{group.name}</Dialog.Title>
-                <p className="text-sm text-gray-500">Gerencie membros e permissoes</p>
+                <p className="text-sm text-gray-500">Gerencie membros e papéis dentro do grupo.</p>
               </div>
               <Dialog.Close asChild>
                 <button className="text-gray-400 hover:text-gray-500">
@@ -165,29 +166,36 @@ const GroupMembersModal = ({ open, onOpenChange, group }) => {
             </div>
 
             <div className="p-6 overflow-y-auto flex-1">
-              {/* Add Member Section */}
               <div className="mb-8 p-4 bg-blue-50 rounded-lg border border-blue-100">
                 <h3 className="text-sm font-semibold text-blue-900 mb-3 flex items-center gap-2">
                   <Plus className="h-4 w-4" /> Adicionar membro
                 </h3>
-                <div className="flex gap-3">
+                <div className="grid gap-3 sm:grid-cols-[1fr_180px_auto]">
                   <select
-                    className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     value={selectedUser}
                     onChange={(e) => setSelectedUser(e.target.value)}
                   >
-                    <option value="">Selecione um usuario...</option>
+                    <option value="">Selecione um usuário...</option>
                     {availableUsers
-                      .filter(u => !members.find(m => m.user_id === u.id))
-                      .map(user => (
-                        <option key={user.id} value={user.id}>
-                          {user.email}
+                      .filter(availableUser => !members.find(member => member.user_id === availableUser.id))
+                      .map(availableUser => (
+                        <option key={availableUser.id} value={availableUser.id}>
+                          {availableUser.full_name || availableUser.email}
                         </option>
                       ))
                     }
                   </select>
-                  <Button 
-                    onClick={handleAddMember} 
+                  <select
+                    className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    value={selectedRole}
+                    onChange={(e) => setSelectedRole(e.target.value)}
+                  >
+                    <option value="member">Membro</option>
+                    <option value="manager">Gestor do grupo</option>
+                  </select>
+                  <Button
+                    onClick={handleAddMember}
                     disabled={!selectedUser || addingLoading}
                     className="bg-blue-600 text-white hover:bg-blue-700 whitespace-nowrap"
                   >
@@ -196,10 +204,9 @@ const GroupMembersModal = ({ open, onOpenChange, group }) => {
                 </div>
               </div>
 
-              {/* Members List */}
               <div className="space-y-4">
                 <h3 className="font-semibold text-gray-900">Membros atuais ({members.length})</h3>
-                
+
                 {loading ? (
                   <div className="flex justify-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
@@ -211,26 +218,26 @@ const GroupMembersModal = ({ open, onOpenChange, group }) => {
                     {members.map((member) => (
                       <div key={member.id} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
                         <div className="flex items-center gap-3">
-                          <div className={`h-8 w-8 rounded-full flex items-center justify-center ${member.role === 'admin' ? 'bg-purple-100 text-purple-600' : 'bg-gray-100 text-gray-600'}`}>
-                            {member.role === 'admin' ? <Shield className="h-4 w-4" /> : <User className="h-4 w-4" />}
+                          <div className={`h-8 w-8 rounded-full flex items-center justify-center ${member.role === 'manager' ? 'bg-purple-100 text-purple-600' : 'bg-gray-100 text-gray-600'}`}>
+                            {member.role === 'manager' ? <Shield className="h-4 w-4" /> : <User className="h-4 w-4" />}
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-gray-900">{member.profiles?.email}</p>
-                            <p className="text-xs text-gray-500">Adicionado em: {new Date(member.added_at).toLocaleDateString()}</p>
+                            <p className="text-sm font-medium text-gray-900">{member.profiles?.full_name || member.profiles?.email}</p>
+                            <p className="text-xs text-gray-500">{member.profiles?.email} • Adicionado em {new Date(member.added_at).toLocaleDateString()}</p>
                           </div>
                         </div>
-                        
+
                         <div className="flex items-center gap-2">
                           <select
-                            className="text-xs border-none bg-transparent font-medium text-gray-600 focus:ring-0 cursor-pointer"
+                            className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 focus:ring-2 focus:ring-blue-500"
                             value={member.role}
-                            onChange={() => confirmAction('toggle_role', member)}
+                            onChange={(event) => confirmAction('role', member, event.target.value)}
                             disabled={processingId === member.id}
                           >
                             <option value="member">Membro</option>
-                            <option value="admin">Admin</option>
+                            <option value="manager">Gestor do grupo</option>
                           </select>
-                          
+
                           <Button
                             variant="ghost"
                             size="icon"
@@ -258,11 +265,11 @@ const GroupMembersModal = ({ open, onOpenChange, group }) => {
       <ConfirmDialog
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
-        title={actionType === 'remove' ? 'Remover membro' : 'Alterar permissao'}
+        title={actionType === 'remove' ? 'Remover membro' : 'Alterar papel no grupo'}
         message={
-          actionType === 'remove' 
+          actionType === 'remove'
             ? `Tem certeza de que deseja remover ${targetMember?.profiles?.email} deste grupo?`
-            : `Tem certeza de que deseja alterar a permissao de ${targetMember?.profiles?.email}?`
+            : `Alterar ${targetMember?.profiles?.email} para ${roleLabel(nextRole)}?`
         }
         confirmText={actionType === 'remove' ? 'Remover' : 'Atualizar'}
         isDangerous={actionType === 'remove'}
