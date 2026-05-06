@@ -30,6 +30,7 @@ const Header = ({ onMenuClick }) => {
 
   return (
     <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-40">
+      <OnboardingGuide />
       <div className="px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-4">
@@ -40,7 +41,6 @@ const Header = ({ onMenuClick }) => {
           </div>
 
           <div className="flex items-center gap-3">
-            <OnboardingGuide />
             <select value={language} onChange={(event) => setLanguage(event.target.value)} className="rounded-md border border-gray-200 bg-white px-2 py-1 text-sm text-gray-700">
               <option value="pt">PT</option>
               <option value="en">EN</option>
