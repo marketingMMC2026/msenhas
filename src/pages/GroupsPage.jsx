@@ -88,7 +88,7 @@ const GroupsPage = () => {
   return (
     <>
       <Helmet>
-        <title>Grupos - SecureVault</title>
+        <title>Grupos - MSENHAS</title>
       </Helmet>
 
       <div className="space-y-6">

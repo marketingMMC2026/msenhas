@@ -130,7 +130,7 @@ const UsersPage = () => {
   return (
     <>
       <Helmet>
-        <title>Gerenciamento de Usuários - SecureVault</title>
+        <title>Usuarios - MSENHAS</title>
       </Helmet>
 
       <div className="space-y-6">
@@ -149,7 +149,7 @@ const UsersPage = () => {
                     <h3 className="text-sm font-medium text-blue-800">Criação de Usuários</h3>
                     <p className="text-sm text-blue-700 mt-1">
                         ℹ️ Criação de Usuários: Usuários entram automaticamente via primeiro login com Google. 
-                        Contas manuais devem ser criadas no Supabase Auth (Authentication &gt; Users &gt; Add User).
+                        Contas manuais devem ser criadas no Supabase Auth, em Authentication &gt; Users &gt; Add User.
                     </p>
                 </div>
             </div>

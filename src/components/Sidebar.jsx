@@ -14,13 +14,13 @@ import { cn } from '@/lib/utils';
 
 const Sidebar = ({ isOpen, onClose }) => {
   const navItems = [
-    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { path: '/vault', label: 'Vault', icon: Lock },
-    { path: '/requests', label: 'Requests', icon: FileText },
-    { path: '/groups', label: 'Groups', icon: Users },
-    { path: '/users', label: 'Users', icon: User },
+    { path: '/dashboard', label: 'Painel', icon: LayoutDashboard },
+    { path: '/vault', label: 'Cofre', icon: Lock },
+    { path: '/requests', label: 'Pedidos', icon: FileText },
+    { path: '/groups', label: 'Grupos', icon: Users },
+    { path: '/users', label: 'Usuários', icon: User },
     { path: '/logs', label: 'Logs', icon: FileBarChart },
-    { path: '/settings', label: 'Settings', icon: Settings },
+    { path: '/settings', label: 'Configurações', icon: Settings },
   ];
 
   return (
@@ -46,7 +46,7 @@ const Sidebar = ({ isOpen, onClose }) => {
           <button
             onClick={onClose}
             className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-            aria-label="Close menu"
+            aria-label="Fechar menu"
           >
             <X className="h-5 w-5 text-gray-600" />
           </button>

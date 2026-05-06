@@ -29,8 +29,8 @@ export const usePendingRequests = () => {
 
       const formattedRequests = data.map(req => ({
         ...req,
-        secret_title: req.secret?.title || 'Unknown Secret',
-        requested_by_email: req.requested_by?.email || 'Unknown User'
+        secret_title: req.secret?.title || 'Senha desconhecida',
+        requested_by_email: req.requested_by?.email || 'Usuario desconhecido'
       }));
 
       setRequests(formattedRequests);

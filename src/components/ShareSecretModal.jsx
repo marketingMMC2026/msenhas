@@ -11,10 +11,11 @@ import LoadingSpinner from '@/components/LoadingSpinner';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from '@/components/ui/label';
-import { Trash2, UserPlus, Users, User } from 'lucide-react';
+import { Trash2, Users, User } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { handleSupabaseError } from '@/utils/handleSupabaseError';
 import { sanitizeAuditDetails } from '@/utils/sanitizeAuditDetails';
+import { formatPermissionLabel } from '@/utils/labels';
 
 const ShareSecretModal = ({ isOpen, onClose, secret }) => {
   const { user } = useAuth();
@@ -68,8 +69,8 @@ const ShareSecretModal = ({ isOpen, onClose, secret }) => {
       const enriched = perms.map(p => ({
         ...p,
         target_name: p.granted_to_user_id 
-          ? (usersMap[p.granted_to_user_id]?.full_name || usersMap[p.granted_to_user_id]?.email || 'Unknown User')
-          : (groupsMap[p.granted_to_group_id]?.name || 'Unknown Group'),
+          ? (usersMap[p.granted_to_user_id]?.full_name || usersMap[p.granted_to_user_id]?.email || 'Usuario desconhecido')
+          : (groupsMap[p.granted_to_group_id]?.name || 'Grupo desconhecido'),
         target_avatar: p.granted_to_user_id ? usersMap[p.granted_to_user_id]?.avatar_url : null,
         type: p.granted_to_user_id ? 'user' : 'group'
       }));
@@ -78,7 +79,7 @@ const ShareSecretModal = ({ isOpen, onClose, secret }) => {
     } catch (err) {
       const formattedError = handleSupabaseError(err, 'Fetch Permissions');
       if (!formattedError.isAbort) {
-        toast({ title: 'Error', description: 'Failed to load permissions', variant: 'destructive' });
+        toast({ title: 'Erro', description: 'Falha ao carregar permissoes.', variant: 'destructive' });
       }
     } finally {
       setLoading(false);
@@ -147,7 +148,7 @@ const ShareSecretModal = ({ isOpen, onClose, secret }) => {
        if (error) throw error;
 
        const targetName = availableTargets.find(t => t.id === selectedTargetId)?.email || 
-                          availableTargets.find(t => t.id === selectedTargetId)?.name || 'Unknown';
+                          availableTargets.find(t => t.id === selectedTargetId)?.name || 'Desconhecido';
 
        await logAction('grant_permission', 'secret', secret.id, sanitizeAuditDetails({ 
            target: targetName, 
@@ -156,14 +157,14 @@ const ShareSecretModal = ({ isOpen, onClose, secret }) => {
            secret_title: secret.title
        }));
 
-       toast({ title: "Success", description: "Access granted successfully." });
+       toast({ title: "Sucesso", description: "Acesso concedido com sucesso." });
        setSelectedTargetId('');
        fetchPermissions();
        setActiveTab('existing');
     } catch (err) {
         const formattedError = handleSupabaseError(err, 'Grant Permission');
         if (!formattedError.isAbort) {
-            toast({ title: "Error", description: formattedError.message, variant: "destructive" });
+            toast({ title: "Erro", description: formattedError.message, variant: "destructive" });
         }
     } finally {
         setLoading(false);
@@ -180,12 +181,12 @@ const ShareSecretModal = ({ isOpen, onClose, secret }) => {
           if (error) throw error;
           
           await logAction('revoke_permission', 'secret', secret.id, sanitizeAuditDetails({ permission_id: permissionId, secret_title: secret.title }));
-          toast({ title: "Revoked", description: "Permission has been revoked." });
+          toast({ title: "Acesso removido", description: "A permissao foi removida." });
           fetchPermissions();
       } catch (err) {
           const formattedError = handleSupabaseError(err, 'Revoke Permission');
           if (!formattedError.isAbort) {
-              toast({ title: "Error", description: formattedError.message, variant: "destructive" });
+              toast({ title: "Erro", description: formattedError.message, variant: "destructive" });
           }
       }
   };
@@ -194,25 +195,25 @@ const ShareSecretModal = ({ isOpen, onClose, secret }) => {
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Share "{secret?.title}"</DialogTitle>
+          <DialogTitle>Compartilhar "{secret?.title}"</DialogTitle>
         </DialogHeader>
 
         {secret?.is_personal ? (
            <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 p-4 rounded text-sm mb-4">
-              <p><strong>Warning:</strong> This is a personal secret. Sharing it will make it accessible to others.</p>
+              <p><strong>Aviso:</strong> esta senha esta marcada como pessoal. Ao compartilhar, outras pessoas poderao acessa-la.</p>
            </div>
         ) : null}
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="existing">Existing Access</TabsTrigger>
-            <TabsTrigger value="add">Add Access</TabsTrigger>
+            <TabsTrigger value="existing">Acessos atuais</TabsTrigger>
+            <TabsTrigger value="add">Adicionar acesso</TabsTrigger>
           </TabsList>
           
           <TabsContent value="existing" className="mt-4 space-y-4 max-h-[400px] overflow-y-auto">
              {loading && <LoadingSpinner size="sm" />}
              {!loading && permissions.length === 0 && (
-                 <p className="text-center text-gray-500 py-8">No specific permissions granted yet.</p>
+                 <p className="text-center text-gray-500 py-8">Nenhuma permissao especifica concedida ainda.</p>
              )}
              {permissions.map(perm => (
                  <div key={perm.id} className="flex items-center justify-between p-3 border rounded-lg bg-white shadow-sm">
@@ -223,7 +224,7 @@ const ShareSecretModal = ({ isOpen, onClose, secret }) => {
                        </Avatar>
                        <div>
                           <p className="text-sm font-medium">{perm.target_name}</p>
-                          <p className="text-xs text-gray-500 capitalize">{perm.type} • {perm.permission_level}</p>
+                          <p className="text-xs text-gray-500">{perm.type === 'user' ? 'Usuario' : 'Grupo'} - {formatPermissionLabel(perm.permission_level)}</p>
                        </div>
                     </div>
                     <Button variant="ghost" size="sm" onClick={() => handleRevoke(perm.id)} className="text-red-500 hover:text-red-700 hover:bg-red-50">
@@ -239,21 +240,21 @@ const ShareSecretModal = ({ isOpen, onClose, secret }) => {
                     onClick={() => setTargetType('user')}
                     className={`flex-1 py-2 text-sm border rounded-lg flex items-center justify-center gap-2 ${targetType === 'user' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white text-gray-600'}`}
                  >
-                    <User className="h-4 w-4" /> User
+                    <User className="h-4 w-4" /> Usuario
                  </button>
                  <button 
                     onClick={() => setTargetType('group')}
                     className={`flex-1 py-2 text-sm border rounded-lg flex items-center justify-center gap-2 ${targetType === 'group' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white text-gray-600'}`}
                  >
-                    <Users className="h-4 w-4" /> Group
+                    <Users className="h-4 w-4" /> Grupo
                  </button>
              </div>
 
              <div className="space-y-3">
-                <Label>Select {targetType === 'user' ? 'User' : 'Group'}</Label>
+                <Label>Selecionar {targetType === 'user' ? 'usuario' : 'grupo'}</Label>
                 <Select value={selectedTargetId} onValueChange={setSelectedTargetId}>
                    <SelectTrigger>
-                      <SelectValue placeholder={`Select ${targetType}...`} />
+                      <SelectValue placeholder={targetType === 'user' ? 'Selecione um usuario...' : 'Selecione um grupo...'} />
                    </SelectTrigger>
                    <SelectContent>
                       {availableTargets.map(t => (
@@ -266,21 +267,21 @@ const ShareSecretModal = ({ isOpen, onClose, secret }) => {
              </div>
 
              <div className="space-y-3">
-                <Label>Permission Level</Label>
+                <Label>Nivel de permissao</Label>
                 <Select value={permissionLevel} onValueChange={setPermissionLevel}>
                    <SelectTrigger>
                       <SelectValue />
                    </SelectTrigger>
                    <SelectContent>
-                      <SelectItem value="view">View (Read Only)</SelectItem>
-                      <SelectItem value="edit">Edit (Update Details)</SelectItem>
-                      <SelectItem value="manage_access">Manage Access (Share)</SelectItem>
+                      <SelectItem value="view">Visualizar</SelectItem>
+                      <SelectItem value="edit">Editar</SelectItem>
+                      <SelectItem value="manage_access">Gerenciar acessos</SelectItem>
                    </SelectContent>
                 </Select>
              </div>
 
              <Button onClick={handleGrant} disabled={!selectedTargetId || loading} className="w-full mt-4">
-                 {loading ? 'Granting...' : 'Grant Access'}
+                 {loading ? 'Concedendo...' : 'Conceder acesso'}
              </Button>
           </TabsContent>
         </Tabs>

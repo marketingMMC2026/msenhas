@@ -83,13 +83,13 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onDelete })
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
-      toast({ title: "Copied!", description: `${label} copied to clipboard.` });
+      toast({ title: "Copiado", description: `${label} copiado para a area de transferencia.` });
       
       logAction('copy_secret', 'secret', secret.id, sanitizeAuditDetails({ field: label }));
     } catch (err) {
       // Clipboard API error or audit log error
       const formattedError = handleSupabaseError(err, 'Copy Secret');
-      toast({ title: "Error", description: formattedError.message, variant: "destructive" });
+      toast({ title: "Erro", description: formattedError.message, variant: "destructive" });
     }
   };
 
@@ -107,7 +107,7 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onDelete })
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {secret.title}
-            {secret.is_personal && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-normal">Personal</span>}
+            {secret.is_personal && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-normal">Pessoal</span>}
           </DialogTitle>
         </DialogHeader>
 
@@ -126,14 +126,14 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onDelete })
                 </div>
              </div>
              <div>
-                <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Website</label>
+                <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Site</label>
                 <div className="flex items-center gap-2 mt-1 p-2">
                    {secret.link ? (
                      <a href={secret.link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1 truncate">
                        {secret.link} <ExternalLink className="h-3 w-3" />
                      </a>
                    ) : (
-                     <span className="text-gray-400">No link</span>
+                     <span className="text-gray-400">Sem link</span>
                    )}
                 </div>
              </div>
@@ -142,8 +142,8 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onDelete })
           {/* Secret Value Row */}
           <div>
             <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider flex justify-between">
-              Secret Value
-              {isRevealed && <span className="text-red-500 text-[10px] animate-pulse">Auto-hiding in 10s...</span>}
+              Senha
+              {isRevealed && <span className="text-red-500 text-[10px] animate-pulse">Ocultando automaticamente em 10s...</span>}
             </label>
             {decryptError && (
               <div className="mt-1 rounded bg-red-50 p-2 text-xs text-red-700">
@@ -158,7 +158,7 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onDelete })
                 <Button size="sm" variant="secondary" className="h-8 px-2 bg-gray-700 hover:bg-gray-600 text-white border-0" onClick={handleReveal}>
                   {isRevealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
-                <Button size="sm" variant="secondary" className="h-8 px-2 bg-gray-700 hover:bg-gray-600 text-white border-0" onClick={() => handleCopy(visibleSecret, 'Secret')}>
+                <Button size="sm" variant="secondary" className="h-8 px-2 bg-gray-700 hover:bg-gray-600 text-white border-0" onClick={() => handleCopy(visibleSecret, 'Senha')}>
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>
@@ -170,7 +170,7 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onDelete })
             <div className="grid gap-4">
               {visibleTwofa && (
                 <div>
-                  <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider">2FA Recovery</label>
+                  <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Recuperacao 2FA</label>
                   <div className="mt-1 bg-gray-50 p-3 rounded font-mono text-xs whitespace-pre-wrap border border-dashed border-gray-300">
                     {isRevealed ? visibleTwofa : '•••••••• •••••••• ••••••••'}
                   </div>
@@ -178,7 +178,7 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onDelete })
               )}
               {secret.notes && (
                 <div>
-                   <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Notes</label>
+                   <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Notas</label>
                    <p className="mt-1 text-sm text-gray-700 whitespace-pre-wrap">{secret.notes}</p>
                 </div>
               )}
@@ -194,11 +194,11 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onDelete })
             </div>
             <div className="flex items-center gap-4">
               {secret.expires_at && (
-                <span className="flex items-center text-orange-600" title="Expires At">
+                <span className="flex items-center text-orange-600" title="Expira em">
                   <Clock className="h-3 w-3 mr-1" /> {new Date(secret.expires_at).toLocaleDateString()}
                 </span>
               )}
-              <span>Updated: {new Date(secret.updated_at).toLocaleDateString()}</span>
+              <span>Atualizado: {new Date(secret.updated_at).toLocaleDateString()}</span>
             </div>
           </div>
         </div>
@@ -206,18 +206,18 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onDelete })
         <DialogFooter className="gap-2 sm:gap-0">
            {isOwner && (
               <Button variant="destructive" onClick={() => onDelete(secret)} className="mr-auto">
-                <Trash2 className="h-4 w-4 mr-2" /> Delete
+                <Trash2 className="h-4 w-4 mr-2" /> Excluir
               </Button>
            )}
            <div className="flex gap-2 w-full sm:w-auto justify-end">
              {canShare && (
                 <Button variant="outline" onClick={() => onShare(secret)}>
-                  <Share2 className="h-4 w-4 mr-2" /> Share
+                  <Share2 className="h-4 w-4 mr-2" /> Compartilhar
                 </Button>
              )}
              {canEdit && (
                 <Button variant="default" onClick={() => onEdit(secret)}>
-                   <Edit2 className="h-4 w-4 mr-2" /> Edit
+                   <Edit2 className="h-4 w-4 mr-2" /> Editar
                 </Button>
              )}
            </div>

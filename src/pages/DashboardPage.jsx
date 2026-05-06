@@ -5,6 +5,7 @@ import Table from '@/components/Table';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { formatActionLabel, formatResourceLabel } from '@/utils/labels';
 
 const DashboardPage = () => {
   const { toast } = useToast();
@@ -66,16 +67,16 @@ const DashboardPage = () => {
         });
 
         const formattedLogs = (logsResult.data || []).map((log) => ({
-          activity: log.action,
+          activity: formatActionLabel(log.action),
           user: log.profiles?.email || 'Sistema',
           timestamp: new Date(log.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }),
-          status: log.resource_type,
+          status: formatResourceLabel(log.resource_type),
         }));
 
         setRecentActivity(
           formattedLogs.length > 0
             ? formattedLogs
-            : [{ activity: 'Login no Sistema', user: user?.email || 'Usuário Atual', timestamp: 'Agora', status: 'Sucesso' }]
+            : [{ activity: 'Login no sistema', user: user?.email || 'Usuário atual', timestamp: 'Agora', status: 'Sucesso' }]
         );
       } catch (err) {
         toast({
@@ -141,8 +142,8 @@ const DashboardPage = () => {
   return (
     <>
       <Helmet>
-        <title>Dashboard - MSENHAS</title>
-        <meta name="description" content="Visão geral do seu dashboard MSENHAS." />
+        <title>Painel - MSENHAS</title>
+        <meta name="description" content="Visão geral do seu painel MSENHAS." />
       </Helmet>
 
       <div className="space-y-8">

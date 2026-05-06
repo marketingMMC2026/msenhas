@@ -47,7 +47,7 @@ const AuthCallback = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-red-50 p-4">
         <Helmet>
-          <title>Erro de Autenticação - SecureVault</title>
+          <title>Erro de Autenticacao - MSENHAS</title>
         </Helmet>
         <div className="text-center max-w-lg bg-white p-8 rounded-lg shadow-lg border border-red-100">
           <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-6">

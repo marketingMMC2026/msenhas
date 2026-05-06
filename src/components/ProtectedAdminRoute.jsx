@@ -48,7 +48,7 @@ const ProtectedAdminRoute = ({ children }) => {
     return (
         <AccessDenied 
             message="Acesso restrito a administradores." 
-            actionLabel="Voltar para Dashboard"
+            actionLabel="Voltar para o painel"
             onAction={() => navigate('/dashboard')}
         />
     );

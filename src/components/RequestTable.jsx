@@ -11,6 +11,14 @@ import {
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabase';
 import { useAuditLog } from '@/hooks/useAuditLog';
+import { formatPermissionLabel } from '@/utils/labels';
+
+const statusLabels = {
+  pending: 'Pendente',
+  approved: 'Aprovado',
+  denied: 'Negado',
+  cancelled: 'Cancelado',
+};
 
 const RequestTable = ({ requests, loading, refetch, onViewSecret }) => {
   const { toast } = useToast();
@@ -70,7 +78,7 @@ const RequestTable = ({ requests, loading, refetch, onViewSecret }) => {
                 <td className="px-4 py-3 font-medium text-gray-900">{req.secret_title}</td>
                 <td className="px-4 py-3">
                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 capitalize">
-                     {req.permission_level.replace('_', ' ')}
+                     {formatPermissionLabel(req.permission_level)}
                    </span>
                 </td>
                 <td className="px-4 py-3">
@@ -78,7 +86,7 @@ const RequestTable = ({ requests, loading, refetch, onViewSecret }) => {
                      ${req.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
                        req.status === 'approved' ? 'bg-green-100 text-green-800' : 
                        req.status === 'denied' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>
-                     {req.status}
+                     {statusLabels[req.status] || req.status}
                    </span>
                 </td>
                 <td className="px-4 py-3 max-w-[200px]">
@@ -107,12 +115,12 @@ const RequestTable = ({ requests, loading, refetch, onViewSecret }) => {
                    )}
                    {req.status === 'approved' && (
                      <Button variant="ghost" size="sm" onClick={() => onViewSecret(req.secret_id)} className="text-blue-600 hover:text-blue-700">
-                        <Eye className="h-4 w-4 mr-1" /> Ver Segredo
+                        <Eye className="h-4 w-4 mr-1" /> Ver senha
                      </Button>
                    )}
                    {req.status === 'denied' && (
                      <Button variant="ghost" size="sm" onClick={() => showDenialReason(req.denial_reason)} className="text-gray-600 hover:text-gray-700">
-                        <HelpCircle className="h-4 w-4 mr-1" /> Ver Motivo
+                        <HelpCircle className="h-4 w-4 mr-1" /> Ver motivo
                      </Button>
                    )}
                 </td>

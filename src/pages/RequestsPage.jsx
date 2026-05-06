@@ -110,7 +110,7 @@ const RequestsPage = () => {
   return (
     <>
       <Helmet>
-        <title>Pedidos de Acesso - Vault</title>
+        <title>Pedidos de Acesso - MSENHAS</title>
         <meta name="description" content="Ver e gerenciar pedidos de acesso." />
       </Helmet>
 

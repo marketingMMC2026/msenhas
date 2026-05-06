@@ -30,7 +30,7 @@ export const useAccessRequests = () => {
       // Flatten structure for easier consumption
       const formattedRequests = data.map(req => ({
         ...req,
-        secret_title: req.secret?.title || 'Unknown Secret'
+        secret_title: req.secret?.title || 'Senha desconhecida'
       }));
 
       setRequests(formattedRequests);

@@ -23,8 +23,8 @@ const DenyRequestModal = ({ isOpen, onClose, request, onSuccess }) => {
 
     if (denialReason.length < 5) {
         toast({
-            title: "Validation Error",
-            description: "Reason must be at least 5 characters.",
+            title: "Validacao",
+            description: "Informe um motivo com pelo menos 5 caracteres.",
             variant: "destructive"
         });
         return;
@@ -39,13 +39,13 @@ const DenyRequestModal = ({ isOpen, onClose, request, onSuccess }) => {
 
       if (error) throw error;
 
-      toast({ title: "Success", description: "Access request denied." });
+      toast({ title: "Pedido negado", description: "O pedido de acesso foi negado." });
       onSuccess();
       onClose();
       setDenialReason('');
     } catch (err) {
       toast({
-        title: "Error",
+        title: "Erro",
         description: err.message,
         variant: "destructive"
       });
@@ -60,21 +60,21 @@ const DenyRequestModal = ({ isOpen, onClose, request, onSuccess }) => {
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Deny Access Request</DialogTitle>
+          <DialogTitle>Negar pedido de acesso</DialogTitle>
           <DialogDescription>
-             Are you sure you want to deny the request from <strong>{request.requested_by_email}</strong> for <strong>{request.secret_title}</strong>?
+             Tem certeza de que deseja negar o pedido de <strong>{request.requested_by_email}</strong> para <strong>{request.secret_title}</strong>?
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
            <div className="space-y-2">
-             <Label htmlFor="denial_reason">Reason for Denial</Label>
+             <Label htmlFor="denial_reason">Motivo da negativa</Label>
              <textarea
                 id="denial_reason"
                 value={denialReason}
                 onChange={(e) => setDenialReason(e.target.value)}
                 className="w-full p-2 border rounded-md text-sm min-h-[80px]"
-                placeholder="Explain why the request is being denied..."
+                placeholder="Explique por que o pedido esta sendo negado..."
                 maxLength={500}
                 required
              />
@@ -82,10 +82,10 @@ const DenyRequestModal = ({ isOpen, onClose, request, onSuccess }) => {
 
            <DialogFooter>
              <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
-               Cancel
+               Cancelar
              </Button>
              <Button type="submit" variant="destructive" disabled={loading}>
-               {loading ? 'Processing...' : 'Deny Request'}
+               {loading ? 'Processando...' : 'Negar pedido'}
              </Button>
            </DialogFooter>
         </form>

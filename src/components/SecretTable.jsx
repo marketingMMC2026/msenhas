@@ -64,7 +64,7 @@ const SecretTable = ({ secrets, loading, onView, onEdit, onDelete, onShare }) =>
   };
 
   if (loading) {
-    return <div className="py-10 flex justify-center"><LoadingSpinner size="lg" message="Loading secrets..." /></div>;
+    return <div className="py-10 flex justify-center"><LoadingSpinner size="lg" message="Carregando senhas..." /></div>;
   }
 
   return (
@@ -75,7 +75,7 @@ const SecretTable = ({ secrets, loading, onView, onEdit, onDelete, onShare }) =>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search secrets..."
+            placeholder="Buscar senhas..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -107,20 +107,20 @@ const SecretTable = ({ secrets, loading, onView, onEdit, onDelete, onShare }) =>
           <table className="w-full text-sm text-left">
             <thead className="bg-gray-50 text-gray-700 font-medium">
               <tr>
-                <th className="px-4 py-3">Title</th>
+                <th className="px-4 py-3">Titulo</th>
                 <th className="px-4 py-3">Login</th>
                 <th className="px-4 py-3">Link</th>
                 <th className="px-4 py-3">Tags</th>
-                <th className="px-4 py-3">Access</th>
-                <th className="px-4 py-3">Updated</th>
-                <th className="px-4 py-3 text-right">Actions</th>
+                <th className="px-4 py-3">Acesso</th>
+                <th className="px-4 py-3">Atualizado</th>
+                <th className="px-4 py-3 text-right">Acoes</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredSecrets.length === 0 ? (
                 <tr>
                   <td colSpan="7" className="px-4 py-8 text-center text-gray-500">
-                    No secrets found matching your filters.
+                    Nenhuma senha encontrada com os filtros atuais.
                   </td>
                 </tr>
               ) : (
@@ -143,7 +143,7 @@ const SecretTable = ({ secrets, loading, onView, onEdit, onDelete, onShare }) =>
                           className="text-blue-600 hover:text-blue-800 inline-flex items-center gap-1"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          Open <ExternalLink className="h-3 w-3" />
+                          Abrir <ExternalLink className="h-3 w-3" />
                         </a>
                       ) : '-'}
                     </td>
@@ -162,11 +162,11 @@ const SecretTable = ({ secrets, loading, onView, onEdit, onDelete, onShare }) =>
                     <td className="px-4 py-3">
                       {secret.is_personal ? (
                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-700">
-                           <Lock className="w-3 h-3 mr-1" /> Personal
+                           <Lock className="w-3 h-3 mr-1" /> Pessoal
                          </span>
                       ) : (
                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                           <Users className="w-3 h-3 mr-1" /> Shared
+                           <Users className="w-3 h-3 mr-1" /> Compartilhada
                          </span>
                       )}
                     </td>
@@ -187,18 +187,18 @@ const SecretTable = ({ secrets, loading, onView, onEdit, onDelete, onShare }) =>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => onView(secret)}>
-                              <Eye className="mr-2 h-4 w-4" /> View Details
+                              <Eye className="mr-2 h-4 w-4" /> Ver detalhes
                             </DropdownMenuItem>
                             
                             {(secret.my_permission === 'owner' || ['edit', 'manage_access'].includes(secret.my_permission)) && (
                               <DropdownMenuItem onClick={() => onEdit(secret)}>
-                                <Edit2 className="mr-2 h-4 w-4" /> Edit Secret
+                                <Edit2 className="mr-2 h-4 w-4" /> Editar senha
                               </DropdownMenuItem>
                             )}
                             
                             {(secret.my_permission === 'owner' || secret.my_permission === 'manage_access') && (
                               <DropdownMenuItem onClick={() => onShare(secret)}>
-                                <Share2 className="mr-2 h-4 w-4" /> Share Access
+                                <Share2 className="mr-2 h-4 w-4" /> Compartilhar acesso
                               </DropdownMenuItem>
                             )}
                             
@@ -207,7 +207,7 @@ const SecretTable = ({ secrets, loading, onView, onEdit, onDelete, onShare }) =>
                                 onClick={() => onDelete(secret)} 
                                 className="text-red-600 focus:text-red-600"
                               >
-                                <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                <Trash2 className="mr-2 h-4 w-4" /> Excluir
                               </DropdownMenuItem>
                             )}
                           </DropdownMenuContent>

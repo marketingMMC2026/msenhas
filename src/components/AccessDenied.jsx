@@ -19,7 +19,7 @@ const AccessDenied = () => {
         <Link to="/dashboard">
           <Button variant="outline" className="w-full flex items-center justify-center gap-2 hover:bg-gray-100">
             <ArrowLeft className="h-4 w-4" />
-            Voltar para Dashboard
+            Voltar para o painel
           </Button>
         </Link>
       </div>

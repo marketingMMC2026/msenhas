@@ -8,9 +8,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { formatPermissionLabel } from '@/utils/labels';
 
 const PendingRequestsTable = ({ requests, loading, onApprove, onDeny }) => {
-  if (loading) return <div className="py-8"><LoadingSpinner message="Loading pending requests..." /></div>;
+  if (loading) return <div className="py-8"><LoadingSpinner message="Carregando pedidos pendentes..." /></div>;
 
   if (!requests.length) {
      return (
@@ -26,12 +27,12 @@ const PendingRequestsTable = ({ requests, loading, onApprove, onDeny }) => {
         <table className="w-full text-sm text-left">
           <thead className="bg-gray-50 text-gray-700 font-medium">
             <tr>
-              <th className="px-4 py-3">Requested By</th>
-              <th className="px-4 py-3">Secret Title</th>
-              <th className="px-4 py-3">Permission</th>
-              <th className="px-4 py-3">Reason</th>
-              <th className="px-4 py-3">Created At</th>
-              <th className="px-4 py-3 text-right">Actions</th>
+              <th className="px-4 py-3">Solicitado por</th>
+              <th className="px-4 py-3">Senha</th>
+              <th className="px-4 py-3">Permissao</th>
+              <th className="px-4 py-3">Motivo</th>
+              <th className="px-4 py-3">Criado em</th>
+              <th className="px-4 py-3 text-right">Acoes</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -41,7 +42,7 @@ const PendingRequestsTable = ({ requests, loading, onApprove, onDeny }) => {
                 <td className="px-4 py-3 text-gray-700">{req.secret_title}</td>
                 <td className="px-4 py-3">
                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 capitalize">
-                     {req.permission_level}
+                     {formatPermissionLabel(req.permission_level)}
                    </span>
                 </td>
                 <td className="px-4 py-3 max-w-[200px]">

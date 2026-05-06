@@ -5,6 +5,7 @@ import { useToast } from '@/components/ui/use-toast';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { Button } from '@/components/ui/button';
 import { Search, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { formatActionLabel, formatResourceLabel } from '@/utils/labels';
 
 const LogsPage = () => {
   const [logs, setLogs] = useState([]);
@@ -100,7 +101,7 @@ const LogsPage = () => {
   return (
     <>
       <Helmet>
-        <title>Logs de Auditoria - SecureVault</title>
+        <title>Logs de Auditoria - MSENHAS</title>
       </Helmet>
 
       <div className="space-y-6">
@@ -130,7 +131,7 @@ const LogsPage = () => {
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">Todas as Ações</option>
-              {uniqueActions.map(a => <option key={a} value={a}>{a}</option>)}
+              {uniqueActions.map(a => <option key={a} value={a}>{formatActionLabel(a)}</option>)}
             </select>
 
             <select
@@ -139,7 +140,7 @@ const LogsPage = () => {
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">Todos os Tipos de Recurso</option>
-              {uniqueResourceTypes.map(r => <option key={r} value={r}>{r}</option>)}
+              {uniqueResourceTypes.map(r => <option key={r} value={r}>{formatResourceLabel(r)}</option>)}
             </select>
 
             <input
@@ -201,12 +202,12 @@ const LogsPage = () => {
                       </td>
                       <td className="px-6 py-4">
                         <span className="inline-flex px-2 py-1 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
-                          {log.action}
+                          {formatActionLabel(log.action)}
                         </span>
                       </td>
                       <td className="px-6 py-4">
                          <div className="flex flex-col">
-                            <span className="text-gray-900 font-medium">{log.resource_type}</span>
+                            <span className="text-gray-900 font-medium">{formatResourceLabel(log.resource_type)}</span>
                             <span className="text-gray-400 text-xs font-mono truncate max-w-[150px]" title={log.resource_id}>{log.resource_id}</span>
                          </div>
                       </td>

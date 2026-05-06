@@ -84,7 +84,7 @@ export const useSecrets = () => {
           ...secret,
           access_type: accessType,
           my_permission: myPermission,
-          owner_email: secret.owner?.email || 'Unknown'
+          owner_email: secret.owner?.email || 'Desconhecido'
         };
       });
 
