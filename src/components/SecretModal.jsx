@@ -2,24 +2,33 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuditLog } from '@/hooks/useAuditLog';
-import { Eye, EyeOff, HelpCircle, Loader2, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, HelpCircle, Loader2, ShieldCheck, Users } from 'lucide-react';
 import { decryptSecretText, encryptSecretText, isSecretEncryptionConfigured } from '@/lib/secretCrypto';
 
 const fieldHelp = {
   title: 'Nome que identifica este acesso. Exemplo: Instagram - Cliente MMC, Meta Business ou Hostinger.',
-  login: 'Usuário, e-mail ou identificador usado para entrar. Exemplo: marketing@meumarketingcontabil.com.',
-  secret: 'Senha, token, chave API ou outro segredo sensível. Esse conteúdo deve ficar protegido e acessível só a quem precisa.',
-  link: 'Endereço para acessar a ferramenta. Você pode digitar apenas o domínio, como insta.com.br; o sistema salva como https://insta.com.br.',
-  notes: 'Informações úteis para operação. Exemplo: cliente relacionado, instruções de login, observações sobre plano ou responsável.',
+  login: 'Usuario, e-mail ou identificador usado para entrar. Exemplo: marketing@meumarketingcontabil.com.',
+  secret: 'Senha, token, chave API ou outro segredo sensivel. Esse conteudo deve ficar protegido e acessivel so a quem precisa.',
+  link: 'Endereco para acessar a ferramenta. Voce pode digitar apenas o dominio, como insta.com.br; o sistema salva como https://insta.com.br.',
+  notes: 'Informacoes uteis para operacao. Exemplo: cliente relacionado, instrucoes de login, observacoes sobre plano ou responsavel.',
   tags: 'Tags ajudam a classificar e encontrar senhas. Exemplo: marketing, cliente-mmc, email-principal, 2fa.',
-  expires: 'Use quando a senha, token ou acesso tiver validade. Exemplo: certificado, token temporário ou licença com vencimento.',
-  twofa: 'Guarde códigos de recuperação 2FA ou instruções de autenticação. Restrinja esse campo a acessos realmente confiáveis.',
-  personal: 'Quando marcado, o segredo fica pessoal: visível para você e administradores. Desmarque para acessos de equipe/agência.'
+  expires: 'Use quando a senha, token ou acesso tiver validade. Exemplo: certificado, token temporario ou licenca com vencimento.',
+  twofa: 'Guarde codigos de recuperacao 2FA ou instrucoes de autenticacao. Restrinja esse campo a acessos realmente confiaveis.',
+  groups: 'Selecione os grupos que devem acessar esta senha. Exemplo: Marketing, Criacao e Design ou Financeiro.',
+  permission: 'Define o que os grupos marcados podem fazer. Visualizar abre a senha; Editar permite alterar; Gerenciar acessos permite compartilhar tambem.',
+  personal: 'Quando marcado, o segredo fica pessoal: visivel para voce e administradores. Ao selecionar grupos, ele vira compartilhado automaticamente.'
+};
+
+const permissionLabels = {
+  view: 'Visualizar',
+  edit: 'Editar',
+  manage_access: 'Gerenciar acessos'
 };
 
 const FieldLabel = ({ htmlFor, children, help }) => (
@@ -50,6 +59,7 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
   const { toast } = useToast();
   const { logAction } = useAuditLog();
   const [loading, setLoading] = useState(false);
+  const [loadingGroups, setLoadingGroups] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
 
   const [title, setTitle] = useState('');
@@ -61,6 +71,30 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
   const [twofa, setTwofa] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
   const [isPersonal, setIsPersonal] = useState(true);
+  const [availableGroups, setAvailableGroups] = useState([]);
+  const [selectedGroupIds, setSelectedGroupIds] = useState([]);
+  const [groupPermissionLevel, setGroupPermissionLevel] = useState('view');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchGroups = async () => {
+      if (!isOpen || !user?.id) return;
+      setLoadingGroups(true);
+      const { data, error } = await supabase.from('groups').select('id, name').order('name');
+      if (!cancelled) {
+        if (error) {
+          toast({ variant: 'destructive', title: 'Erro ao carregar grupos', description: error.message });
+        } else {
+          setAvailableGroups(data || []);
+        }
+        setLoadingGroups(false);
+      }
+    };
+
+    fetchGroups();
+    return () => { cancelled = true; };
+  }, [isOpen, user?.id, toast]);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,19 +113,38 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
       setTags(secret.tags ? secret.tags.join(', ') : '');
       setExpiresAt(secret.expires_at || '');
       setIsPersonal(secret.is_personal ?? true);
+      setSelectedGroupIds([]);
+      setGroupPermissionLevel('view');
 
       try {
-        const decryptedSecret = await decryptSecretText(secret.secret_value || '');
-        const decryptedTwofa = await decryptSecretText(secret.twofa_recovery || '');
+        const [decryptedSecret, decryptedTwofa, permissionsResult] = await Promise.all([
+          decryptSecretText(secret.secret_value || ''),
+          decryptSecretText(secret.twofa_recovery || ''),
+          supabase
+            .from('secret_permissions')
+            .select('granted_to_group_id, permission_level')
+            .eq('secret_id', secret.id)
+            .is('revoked_at', null)
+            .not('granted_to_group_id', 'is', null)
+        ]);
+
         if (!cancelled) {
           setSecretValue(decryptedSecret || '');
           setTwofa(decryptedTwofa || '');
+
+          if (!permissionsResult.error) {
+            const groupPermissions = permissionsResult.data || [];
+            setSelectedGroupIds(groupPermissions.map((permission) => permission.granted_to_group_id));
+            if (groupPermissions[0]?.permission_level) {
+              setGroupPermissionLevel(groupPermissions[0].permission_level);
+            }
+          }
         }
       } catch (err) {
         if (!cancelled) {
           toast({
-            variant: "destructive",
-            title: "Erro ao abrir segredo",
+            variant: 'destructive',
+            title: 'Erro ao abrir segredo',
             description: err.message,
           });
         }
@@ -115,21 +168,58 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
     setTwofa('');
     setExpiresAt('');
     setIsPersonal(true);
+    setSelectedGroupIds([]);
+    setGroupPermissionLevel('view');
+  };
+
+  const toggleGroup = (groupId) => {
+    setSelectedGroupIds((current) => {
+      const next = current.includes(groupId)
+        ? current.filter((id) => id !== groupId)
+        : [...current, groupId];
+
+      if (next.length > 0) setIsPersonal(false);
+      return next;
+    });
+  };
+
+  const syncGroupPermissions = async (secretId) => {
+    const { error: revokeError } = await supabase
+      .from('secret_permissions')
+      .update({ revoked_at: new Date().toISOString() })
+      .eq('secret_id', secretId)
+      .is('revoked_at', null)
+      .not('granted_to_group_id', 'is', null);
+
+    if (revokeError) throw revokeError;
+
+    if (selectedGroupIds.length === 0) return;
+
+    const permissionPayloads = selectedGroupIds.map((groupId) => ({
+      secret_id: secretId,
+      granted_to_user_id: null,
+      granted_to_group_id: groupId,
+      permission_level: groupPermissionLevel,
+      granted_by_id: user.id,
+    }));
+
+    const { error: insertError } = await supabase.from('secret_permissions').insert(permissionPayloads);
+    if (insertError) throw insertError;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!title.trim() || !secretValue.trim()) {
       toast({
-         variant: "destructive",
-         title: "Campos obrigatórios",
-         description: "Título e Senha/Segredo são obrigatórios."
+         variant: 'destructive',
+         title: 'Campos obrigatorios',
+         description: 'Titulo e Senha/Segredo sao obrigatorios.'
       });
       return;
     }
 
     if (!user?.id) {
-        toast({ variant: "destructive", title: "Erro de sessão", description: "Sessão ainda carregando. Tente novamente." });
+        toast({ variant: 'destructive', title: 'Erro de sessao', description: 'Sessao ainda carregando. Tente novamente.' });
         return;
     }
 
@@ -146,9 +236,10 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
         tags: tags.split(',').map(t => t.trim()).filter(Boolean),
         twofa_recovery: twofa.trim() ? await encryptSecretText(twofa.trim()) : null,
         expires_at: expiresAt || null,
-        is_personal: isPersonal
+        is_personal: selectedGroupIds.length > 0 ? false : isPersonal
       };
 
+      let savedSecretId = secret?.id;
       if (secret) {
         const { error } = await supabase
           .from('secrets')
@@ -158,8 +249,9 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
           .single();
 
         if (error) throw error;
-        await logAction('update_secret', 'secret', secret.id, { title: payload.title });
-        toast({ title: "Sucesso", description: "Segredo atualizado com sucesso." });
+        await syncGroupPermissions(secret.id);
+        await logAction('update_secret', 'secret', secret.id, { title: payload.title, groups: selectedGroupIds.length });
+        toast({ title: 'Sucesso', description: 'Segredo atualizado com sucesso.' });
       } else {
         const { data, error } = await supabase
           .from('secrets')
@@ -168,11 +260,13 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
           .single();
 
         if (error) throw error;
-        await logAction('create_secret', 'secret', data.id, { title: payload.title });
-        toast({ title: "Sucesso", description: "Segredo criado com sucesso." });
+        savedSecretId = data.id;
+        await syncGroupPermissions(data.id);
+        await logAction('create_secret', 'secret', data.id, { title: payload.title, groups: selectedGroupIds.length });
+        toast({ title: 'Sucesso', description: 'Segredo criado com sucesso.' });
       }
 
-      if (onSuccess) onSuccess();
+      if (onSuccess) onSuccess(savedSecretId);
       onClose();
     } catch (err) {
       console.error('Error saving secret:', {
@@ -181,8 +275,8 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
         message: err.message
       });
       toast({
-        variant: "destructive",
-        title: secret ? "Erro ao atualizar" : "Erro ao criar segredo",
+        variant: 'destructive',
+        title: secret ? 'Erro ao atualizar' : 'Erro ao criar segredo',
         description: err.message
       });
     } finally {
@@ -193,14 +287,14 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
   return (
     <TooltipProvider delayDuration={150}>
       <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[680px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{secret ? 'Editar Segredo' : 'Criar Segredo'}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4 py-2" noValidate>
               <div className="grid grid-cols-1 gap-4">
                   <div className="space-y-2">
-                      <FieldLabel htmlFor="title" help={fieldHelp.title}>Título *</FieldLabel>
+                      <FieldLabel htmlFor="title" help={fieldHelp.title}>Titulo *</FieldLabel>
                       <input id="title" required value={title} onChange={e => setTitle(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Ex: Instagram - Cliente MMC" />
                   </div>
 
@@ -246,7 +340,7 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                        <div className="space-y-2">
-                          <FieldLabel htmlFor="tags" help={fieldHelp.tags}>Tags (separadas por vírgula)</FieldLabel>
+                          <FieldLabel htmlFor="tags" help={fieldHelp.tags}>Tags (separadas por virgula)</FieldLabel>
                           <input id="tags" value={tags} onChange={e => setTags(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="marketing, cliente-mmc, email-principal" />
                       </div>
                        <div className="space-y-2">
@@ -256,26 +350,80 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
                   </div>
 
                   <div className="space-y-2">
-                      <FieldLabel htmlFor="twofa" help={fieldHelp.twofa}>Código de Recuperação 2FA (opcional)</FieldLabel>
-                      <input id="twofa" value={twofa} onChange={e => setTwofa(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md font-mono text-sm" placeholder="Ex: códigos de recuperação separados por espaço ou linha" />
+                      <FieldLabel htmlFor="twofa" help={fieldHelp.twofa}>Codigo de Recuperacao 2FA (opcional)</FieldLabel>
+                      <input id="twofa" value={twofa} onChange={e => setTwofa(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md font-mono text-sm" placeholder="Ex: codigos de recuperacao separados por espaco ou linha" />
+                  </div>
+
+                  <div className="space-y-3 rounded-lg border border-gray-200 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <FieldLabel htmlFor="group-permission" help={fieldHelp.groups}>Grupos com acesso</FieldLabel>
+                        <p className="mt-1 text-xs text-gray-500">Marque um ou mais grupos para compartilhar esta senha com a equipe.</p>
+                      </div>
+                      <div className="w-48">
+                        <FieldLabel htmlFor="group-permission" help={fieldHelp.permission}>Permissao</FieldLabel>
+                        <Select value={groupPermissionLevel} onValueChange={setGroupPermissionLevel}>
+                          <SelectTrigger id="group-permission" className="mt-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(permissionLabels).map(([value, label]) => (
+                              <SelectItem key={value} value={value}>{label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="max-h-36 overflow-auto rounded-md border border-gray-100 bg-gray-50 p-2">
+                      {loadingGroups ? (
+                        <div className="flex items-center gap-2 px-2 py-3 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Carregando grupos...</div>
+                      ) : availableGroups.length === 0 ? (
+                        <p className="px-2 py-3 text-sm text-gray-500">Nenhum grupo criado ainda. Crie grupos na tela Grupos ou importe uma planilha com a coluna grupo.</p>
+                      ) : (
+                        availableGroups.map((group) => (
+                          <label key={group.id} className="flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-white">
+                            <input
+                              type="checkbox"
+                              checked={selectedGroupIds.includes(group.id)}
+                              onChange={() => toggleGroup(group.id)}
+                              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <Users className="h-4 w-4 text-gray-400" />
+                            <span>{group.name}</span>
+                          </label>
+                        ))
+                      )}
+                    </div>
                   </div>
 
                   {isSecretEncryptionConfigured() ? (
                     <div className="flex items-start gap-2 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
                       <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-                      <span>Criptografia ativa: senhas e códigos 2FA são salvos criptografados.</span>
+                      <span>Criptografia ativa: senhas e codigos 2FA sao salvos criptografados.</span>
                     </div>
                   ) : (
                     <div className="rounded-md border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
-                      Criptografia ainda não configurada. Defina <strong>VITE_SECRET_ENCRYPTION_KEY</strong> na Vercel para salvar novos segredos criptografados.
+                      Criptografia ainda nao configurada. Defina <strong>VITE_SECRET_ENCRYPTION_KEY</strong> na Vercel para salvar novos segredos criptografados.
                     </div>
                   )}
 
                   <div className="flex items-start space-x-2 pt-2">
-                       <input type="checkbox" id="personal" checked={isPersonal} onChange={e => setIsPersonal(e.target.checked)} className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                       <input
+                        type="checkbox"
+                        id="personal"
+                        checked={selectedGroupIds.length > 0 ? false : isPersonal}
+                        disabled={selectedGroupIds.length > 0}
+                        onChange={e => setIsPersonal(e.target.checked)}
+                        className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                      />
                        <div className="space-y-1">
-                        <FieldLabel htmlFor="personal" help={fieldHelp.personal}>Este é um segredo pessoal</FieldLabel>
-                        <p className="text-xs text-gray-500">Visível apenas para você e administradores.</p>
+                        <FieldLabel htmlFor="personal" help={fieldHelp.personal}>Este e um segredo pessoal</FieldLabel>
+                        <p className="text-xs text-gray-500">
+                          {selectedGroupIds.length > 0
+                            ? 'Desativado porque ha grupos selecionados. Esta senha sera compartilhada.'
+                            : 'Visivel apenas para voce e administradores.'}
+                        </p>
                        </div>
                   </div>
               </div>
