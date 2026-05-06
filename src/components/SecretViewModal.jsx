@@ -1,35 +1,48 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogFooter 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useAuditLog } from '@/hooks/useAuditLog';
-import { Eye, EyeOff, Copy, ExternalLink, Edit2, Share2, Trash2, Clock } from 'lucide-react';
+import { Eye, EyeOff, Copy, ExternalLink, Edit2, Share2, Archive, RotateCcw, Clock, History } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { handleSupabaseError } from '@/utils/handleSupabaseError';
 import { sanitizeAuditDetails } from '@/utils/sanitizeAuditDetails';
 import { decryptSecretText } from '@/lib/secretCrypto';
+import { supabase } from '@/lib/supabase';
+import { useLanguage } from '@/contexts/LanguageContext';
 
-const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onDelete }) => {
+const actionLabelKey = {
+  password_changed: 'passwordChanged',
+  archive_secret: 'secretArchived',
+  restore_secret: 'secretRestored',
+  update_secret: 'secretUpdated',
+};
+
+const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onArchive, onRestore }) => {
   const { logAction } = useAuditLog();
   const { toast } = useToast();
+  const { t } = useLanguage();
   const [isRevealed, setIsRevealed] = useState(false);
   const [decryptedSecret, setDecryptedSecret] = useState('');
   const [decryptedTwofa, setDecryptedTwofa] = useState('');
   const [decryptError, setDecryptError] = useState(null);
+  const [historyRows, setHistoryRows] = useState([]);
+  const [revealedHistory, setRevealedHistory] = useState({});
   const timerRef = useRef(null);
 
-  // Reset state when modal opens/changes
   useEffect(() => {
     let cancelled = false;
 
     if (isOpen) {
       setIsRevealed(false);
       setDecryptError(null);
+      setHistoryRows([]);
+      setRevealedHistory({});
       if (timerRef.current) clearTimeout(timerRef.current);
 
       const decryptFields = async () => {
@@ -50,7 +63,37 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onDelete })
         }
       };
 
+      const fetchHistory = async () => {
+        if (!secret?.id) return;
+        const { data, error } = await supabase
+          .from('secret_history')
+          .select('id, action, changed_fields, old_secret_value, changed_by_id, changed_at, changed_by:profiles(email, full_name)')
+          .eq('secret_id', secret.id)
+          .order('changed_at', { ascending: false })
+          .limit(8);
+
+        if (error) {
+          if (!cancelled && error.code !== '42P01') console.warn('Could not load secret history:', error.message);
+          return;
+        }
+
+        const hydrated = await Promise.all((data || []).map(async (row) => {
+          let previousPassword = '';
+          if (row.old_secret_value) {
+            try {
+              previousPassword = await decryptSecretText(row.old_secret_value);
+            } catch {
+              previousPassword = '';
+            }
+          }
+          return { ...row, previousPassword };
+        }));
+
+        if (!cancelled) setHistoryRows(hydrated);
+      };
+
       decryptFields();
+      fetchHistory();
     }
     return () => {
        cancelled = true;
@@ -64,15 +107,12 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onDelete })
       if (timerRef.current) clearTimeout(timerRef.current);
     } else {
       setIsRevealed(true);
-      // Try/catch for logging action, although it's fire-and-forget usually, 
-      // but strictly user requested to use handleSupabaseError for reveal_secret
       try {
         logAction('reveal_secret', 'secret', secret.id, sanitizeAuditDetails({ title: secret.title }));
       } catch (err) {
         handleSupabaseError(err, 'Log Reveal Secret');
       }
-      
-      // Auto-hide after 10 seconds
+
       timerRef.current = setTimeout(() => {
         setIsRevealed(false);
       }, 10000);
@@ -84,10 +124,8 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onDelete })
     try {
       await navigator.clipboard.writeText(text);
       toast({ title: "Copiado", description: `${label} copiado para a area de transferencia.` });
-      
       logAction('copy_secret', 'secret', secret.id, sanitizeAuditDetails({ field: label }));
     } catch (err) {
-      // Clipboard API error or audit log error
       const formattedError = handleSupabaseError(err, 'Copy Secret');
       toast({ title: "Erro", description: formattedError.message, variant: "destructive" });
     }
@@ -95,24 +133,24 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onDelete })
 
   if (!secret) return null;
 
-  const canEdit = secret.my_permission === 'owner' || ['edit', 'manage_access'].includes(secret.my_permission);
-  const canShare = secret.my_permission === 'owner' || secret.my_permission === 'manage_access';
-  const isOwner = secret.my_permission === 'owner';
+  const canEdit = !secret.is_archived && ['owner', 'admin', 'edit', 'manage_access'].includes(secret.my_permission);
+  const canShare = !secret.is_archived && ['owner', 'admin', 'manage_access'].includes(secret.my_permission);
+  const canManage = ['owner', 'admin', 'manage_access'].includes(secret.my_permission);
   const visibleSecret = decryptError ? '' : (decryptedSecret || secret.secret_value || '');
   const visibleTwofa = decryptError ? '' : (decryptedTwofa || secret.twofa_recovery || '');
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {secret.title}
             {secret.is_personal && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-normal">Pessoal</span>}
+            {secret.is_archived && <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-normal">{t('archived')}</span>}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6 py-4">
-          {/* Metadata Row */}
           <div className="grid grid-cols-2 gap-4 text-sm">
              <div>
                 <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Login</label>
@@ -139,7 +177,6 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onDelete })
              </div>
           </div>
 
-          {/* Secret Value Row */}
           <div>
             <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider flex justify-between">
               Senha
@@ -165,7 +202,6 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onDelete })
             </div>
           </div>
 
-          {/* 2FA & Notes */}
           {(visibleTwofa || secret.notes) && (
             <div className="grid gap-4">
               {visibleTwofa && (
@@ -185,11 +221,54 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onDelete })
             </div>
           )}
 
-          {/* Tags & Dates */}
+          <div className="rounded-lg border border-gray-200 bg-white">
+            <div className="flex items-center gap-2 border-b border-gray-100 px-4 py-3 font-semibold text-gray-900">
+              <History className="h-4 w-4 text-gray-500" /> {t('passwordHistory')}
+            </div>
+            <div className="divide-y divide-gray-100">
+              {historyRows.length === 0 ? (
+                <p className="px-4 py-4 text-sm text-gray-500">{t('noPasswordHistory')}</p>
+              ) : historyRows.map(row => {
+                const isHistoryRevealed = Boolean(revealedHistory[row.id]);
+                return (
+                  <div key={row.id} className="px-4 py-3 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="font-medium text-gray-900">{t(actionLabelKey[row.action] || 'secretUpdated')}</p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(row.changed_at).toLocaleString('pt-BR')} • {t('changedBy')} {row.changed_by?.full_name || row.changed_by?.email || 'Sistema'}
+                        </p>
+                      </div>
+                      {row.changed_fields?.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {row.changed_fields.map(field => <span key={field} className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{field}</span>)}
+                        </div>
+                      )}
+                    </div>
+                    {row.previousPassword && (
+                      <div className="mt-3 flex items-center gap-2 rounded-md bg-gray-50 p-2">
+                        <span className="text-xs font-medium text-gray-500">{t('previousPassword')}</span>
+                        <code className="flex-1 truncate font-mono text-xs text-gray-800">
+                          {isHistoryRevealed ? row.previousPassword : '•'.repeat(20)}
+                        </code>
+                        <Button type="button" size="sm" variant="ghost" onClick={() => setRevealedHistory(prev => ({ ...prev, [row.id]: !prev[row.id] }))}>
+                          {isHistoryRevealed ? t('hide') : t('show')}
+                        </Button>
+                        <Button type="button" size="sm" variant="ghost" onClick={() => handleCopy(row.previousPassword, t('previousPassword'))}>
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t">
             <div className="flex gap-2">
-               {secret.tags && secret.tags.map(t => (
-                 <span key={t} className="bg-gray-100 px-2 py-0.5 rounded-full">{t}</span>
+               {secret.tags && secret.tags.map(tag => (
+                 <span key={tag} className="bg-gray-100 px-2 py-0.5 rounded-full">{tag}</span>
                ))}
             </div>
             <div className="flex items-center gap-4">
@@ -204,9 +283,14 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onDelete })
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
-           {isOwner && (
-              <Button variant="destructive" onClick={() => onDelete(secret)} className="mr-auto">
-                <Trash2 className="h-4 w-4 mr-2" /> Excluir
+           {canManage && !secret.is_archived && (
+              <Button variant="outline" onClick={() => onArchive(secret)} className="mr-auto text-amber-700 border-amber-200 hover:bg-amber-50">
+                <Archive className="h-4 w-4 mr-2" /> {t('archive')}
+              </Button>
+           )}
+           {canManage && secret.is_archived && (
+              <Button variant="outline" onClick={() => onRestore(secret)} className="mr-auto text-green-700 border-green-200 hover:bg-green-50">
+                <RotateCcw className="h-4 w-4 mr-2" /> {t('restore')}
               </Button>
            )}
            <div className="flex gap-2 w-full sm:w-auto justify-end">
