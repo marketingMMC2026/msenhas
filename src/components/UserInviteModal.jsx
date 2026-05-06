@@ -9,10 +9,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { Loader2, Mail, Users } from 'lucide-react';
 
 const roleOptions = [
-  { value: 'viewer', label: 'Visualizador', description: 'Entra no sistema e acessa apenas senhas liberadas por grupo.' },
-  { value: 'editor', label: 'Editor', description: 'Pode criar e editar senhas permitidas.' },
-  { value: 'manager', label: 'Gestor', description: 'Pode organizar acessos e gerenciar grupos operacionais.' },
-  { value: 'admin', label: 'Admin do sistema', description: 'Acesso total ao sistema.' },
+  { value: 'viewer', label: 'Viewer', uiLabel: 'Visualizador', description: 'Entra no sistema e acessa apenas senhas liberadas por grupo.' },
+  { value: 'editor', label: 'Editor', uiLabel: 'Editor', description: 'Pode criar e editar senhas permitidas.' },
+  { value: 'manager', label: 'Manager', uiLabel: 'Gestor', description: 'Pode organizar acessos e gerenciar grupos operacionais.' },
+  { value: 'admin', label: 'System Admin', uiLabel: 'Admin do sistema', description: 'Acesso total ao sistema.' },
 ];
 
 const UserInviteModal = ({ open, onOpenChange, onSuccess }) => {
@@ -74,7 +74,7 @@ const UserInviteModal = ({ open, onOpenChange, onSuccess }) => {
       body: JSON.stringify({
         email: targetEmail,
         fullName: fullName.trim(),
-        roleLabel: selectedRole?.label || 'Visualizador',
+        roleLabel: selectedRole?.label || 'Viewer',
         groupNames: selectedGroupNames,
         inviteUrl: buildInviteUrl(targetEmail),
       }),
@@ -82,7 +82,7 @@ const UserInviteModal = ({ open, onOpenChange, onSuccess }) => {
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || 'Nao foi possivel enviar o e-mail de convite.');
+      throw new Error(data.error || 'Could not send the invitation email.');
     }
     return data;
   };
@@ -179,7 +179,7 @@ const UserInviteModal = ({ open, onOpenChange, onSuccess }) => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {roleOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+                {roleOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.uiLabel}</SelectItem>)}
               </SelectContent>
             </Select>
             <p className="text-xs text-gray-500">{selectedRole?.description}</p>
