@@ -27,6 +27,9 @@ const UserInviteModal = ({ open, onOpenChange, onSuccess }) => {
   const [loadingGroups, setLoadingGroups] = useState(false);
 
   const selectedRole = useMemo(() => roleOptions.find((option) => option.value === role), [role]);
+  const selectedGroupNames = useMemo(() => selectedGroups
+    .map((groupId) => groups.find((group) => group.id === groupId)?.name)
+    .filter(Boolean), [selectedGroups, groups]);
 
   useEffect(() => {
     const fetchGroups = async () => {
@@ -64,11 +67,24 @@ const UserInviteModal = ({ open, onOpenChange, onSuccess }) => {
 
   const buildInviteUrl = (targetEmail) => `${window.location.origin}/login?invite=${encodeURIComponent(targetEmail)}`;
 
-  const openMailInvite = (targetEmail) => {
-    const inviteUrl = buildInviteUrl(targetEmail);
-    const subject = encodeURIComponent('Convite para acessar o M Password');
-    const body = encodeURIComponent(`Ola${fullName ? ` ${fullName}` : ''},\n\nVoce foi convidado para acessar o M Password.\n\nEntre usando sua conta Google neste link:\n${inviteUrl}\n\nDepois do login, seus acessos de grupo serao liberados automaticamente.`);
-    window.location.href = `mailto:${targetEmail}?subject=${subject}&body=${body}`;
+  const sendInviteEmail = async (targetEmail) => {
+    const response = await fetch('/api/send-invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: targetEmail,
+        fullName: fullName.trim(),
+        roleLabel: selectedRole?.label || 'Visualizador',
+        groupNames: selectedGroupNames,
+        inviteUrl: buildInviteUrl(targetEmail),
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || 'Nao foi possivel enviar o e-mail de convite.');
+    }
+    return data;
   };
 
   const handleSubmit = async (event) => {
@@ -103,16 +119,17 @@ const UserInviteModal = ({ open, onOpenChange, onSuccess }) => {
 
       if (error) throw error;
 
+      await sendInviteEmail(cleanEmail);
+
       toast({
-        title: 'Convite preparado',
-        description: 'O convite foi salvo. O e-mail de convite sera aberto para envio.',
+        title: 'Convite enviado',
+        description: `O convite foi enviado para ${cleanEmail}.`,
       });
 
-      openMailInvite(cleanEmail);
       onSuccess?.();
       close();
     } catch (err) {
-      toast({ variant: 'destructive', title: 'Erro ao criar convite', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro ao enviar convite', description: err.message });
     } finally {
       setLoading(false);
     }
@@ -127,7 +144,7 @@ const UserInviteModal = ({ open, onOpenChange, onSuccess }) => {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
-            A pessoa recebera o convite para entrar com Google. Ao fazer login, o sistema aplica automaticamente o perfil e os grupos escolhidos aqui.
+            A pessoa recebera o convite por e-mail e entrara com Google. Ao fazer login, o sistema aplica automaticamente o perfil e os grupos escolhidos aqui.
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -189,7 +206,7 @@ const UserInviteModal = ({ open, onOpenChange, onSuccess }) => {
           <DialogFooter>
             <Button type="button" variant="outline" onClick={close} disabled={loading}>Cancelar</Button>
             <Button type="submit" disabled={loading} className="bg-blue-600 text-white hover:bg-blue-700">
-              {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando...</> : <><Mail className="mr-2 h-4 w-4" /> Salvar e enviar convite</>}
+              {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Enviando...</> : <><Mail className="mr-2 h-4 w-4" /> Salvar e enviar convite</>}
             </Button>
           </DialogFooter>
         </form>
