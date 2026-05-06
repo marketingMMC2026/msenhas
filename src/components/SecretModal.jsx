@@ -15,7 +15,6 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
   const { logAction } = useAuditLog();
   const [loading, setLoading] = useState(false);
 
-  // Form States
   const [title, setTitle] = useState('');
   const [login, setLogin] = useState('');
   const [secretValue, setSecretValue] = useState('');
@@ -90,7 +89,7 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
       });
       return;
     }
-    
+
     if (!user?.id) {
         toast({ variant: "destructive", title: "Erro de sessão", description: "Sessão ainda carregando. Tente novamente." });
         return;
@@ -108,32 +107,29 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
         tags: tags.split(',').map(t => t.trim()).filter(Boolean),
         twofa_recovery: twofa.trim() ? await encryptSecretText(twofa.trim()) : null,
         expires_at: expiresAt || null,
-        is_personal: isPersonal,
-        owner_id: user.id
+        is_personal: isPersonal
       };
 
       let result;
       if (secret) {
-        // Update
         const { data, error } = await supabase
           .from('secrets')
           .update(payload)
           .eq('id', secret.id)
           .select()
           .single();
-        
+
         if (error) throw error;
         result = data;
         await logAction('update_secret', 'secret', secret.id, { title: payload.title });
         toast({ title: "Sucesso", description: "Segredo atualizado com sucesso." });
       } else {
-        // Create
         const { data, error } = await supabase
           .from('secrets')
-          .insert(payload)
+          .insert({ ...payload, owner_id: user.id })
           .select()
           .single();
-        
+
         if (error) throw error;
         result = data;
         await logAction('create_secret', 'secret', result.id, { title: payload.title });
@@ -148,10 +144,10 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
         code: err.code,
         message: err.message
       });
-      toast({ 
-        variant: "destructive", 
-        title: secret ? "Erro ao atualizar" : "Erro ao criar segredo", 
-        description: err.message 
+      toast({
+        variant: "destructive",
+        title: secret ? "Erro ao atualizar" : "Erro ao criar segredo",
+        description: err.message
       });
     } finally {
       setLoading(false);
@@ -170,7 +166,7 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
                     <Label htmlFor="title">Título *</Label>
                     <input id="title" required value={title} onChange={e => setTitle(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Ex: Banco Itaú" />
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                         <Label htmlFor="login">Login (opcional)</Label>
@@ -191,7 +187,7 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
                     <Label htmlFor="notes">Notas (opcional)</Label>
                     <textarea id="notes" value={notes} onChange={e => setNotes(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md min-h-[80px]" />
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                      <div className="space-y-2">
                         <Label htmlFor="tags">Tags (separadas por vírgula)</Label>
@@ -202,7 +198,7 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
                         <input id="expires" type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md" />
                     </div>
                 </div>
-                
+
                 <div className="space-y-2">
                     <Label htmlFor="twofa">Código de Recuperação 2FA (opcional)</Label>
                     <input id="twofa" value={twofa} onChange={e => setTwofa(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md font-mono text-sm" />
