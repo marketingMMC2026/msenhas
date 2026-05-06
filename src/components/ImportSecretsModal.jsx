@@ -167,6 +167,7 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
     if (!user?.id || validRows.length === 0) return;
 
     setLoading(true);
+    let insertedSecrets = [];
     try {
       const hasSharedAccess = selectedUsers.length > 0 || selectedGroups.length > 0;
       const payloads = await Promise.all(validRows.map(async (row) => ({
@@ -180,12 +181,13 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
         is_personal: !hasSharedAccess,
       })));
 
-      const { data: insertedSecrets, error: insertError } = await supabase
+      const { data, error: insertError } = await supabase
         .from('secrets')
         .insert(payloads)
         .select('id, title');
 
       if (insertError) throw insertError;
+      insertedSecrets = data || [];
 
       const permissionPayloads = [];
       insertedSecrets.forEach((secret) => {
@@ -226,6 +228,13 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
       onSuccess?.();
       handleClose();
     } catch (err) {
+      if (insertedSecrets.length > 0) {
+        await supabase
+          .from('secrets')
+          .update({ deleted_at: new Date().toISOString() })
+          .in('id', insertedSecrets.map((secret) => secret.id));
+      }
+
       toast({ title: 'Erro ao importar', description: err.message, variant: 'destructive' });
     } finally {
       setLoading(false);
