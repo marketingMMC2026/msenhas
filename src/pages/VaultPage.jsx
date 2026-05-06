@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Helmet } from 'react-helmet';
-import { Plus, RefreshCw, AlertCircle, Upload } from 'lucide-react';
+import { Plus, RefreshCw, AlertCircle, Upload, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { useSecrets } from '@/hooks/useSecrets';
@@ -56,7 +56,14 @@ const VaultPage = () => {
       closeModal();
     } catch (err) {
       const formattedError = handleSupabaseError(err, 'Delete Secret');
-      if (!formattedError.isAbort) toast({ title: 'Erro', description: formattedError.message, variant: 'destructive' });
+      const isPolicyError = formattedError.message?.toLowerCase().includes('row-level security');
+      if (!formattedError.isAbort) {
+        toast({
+          title: t('deleteFailedTitle'),
+          description: isPolicyError ? t('deletePolicyError') : formattedError.message,
+          variant: 'destructive'
+        });
+      }
     }
   };
 
@@ -84,10 +91,23 @@ const VaultPage = () => {
         <SecretViewModal isOpen={modalState.type === 'view'} onClose={closeModal} secret={modalState.data} onEdit={() => handleEdit(modalState.data)} onShare={() => handleShare(modalState.data)} onDelete={() => handleDeleteClick(modalState.data)} />
         <ShareSecretModal isOpen={modalState.type === 'share'} onClose={closeModal} secret={modalState.data} />
         <ImportSecretsModal isOpen={modalState.type === 'import'} onClose={closeModal} onSuccess={handleSuccess} />
-        <AlertDialog open={modalState.type === 'delete'} onOpenChange={closeModal}>
-          <AlertDialogContent>
-            <AlertDialogHeader><AlertDialogTitle>{t('deleteConfirmTitle')}</AlertDialogTitle><AlertDialogDescription>{t('deleteConfirmBody')} <strong>"{modalState.data?.title}"</strong>.</AlertDialogDescription></AlertDialogHeader>
-            <AlertDialogFooter><AlertDialogCancel>{t('cancel')}</AlertDialogCancel><AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">{t('deletePassword')}</AlertDialogAction></AlertDialogFooter>
+        <AlertDialog open={modalState.type === 'delete'} onOpenChange={(open) => !open && closeModal()}>
+          <AlertDialogContent className="max-w-md">
+            <AlertDialogHeader className="space-y-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-red-50 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <AlertDialogTitle className="text-xl">{t('deleteConfirmTitle')}</AlertDialogTitle>
+              <AlertDialogDescription className="text-base leading-6 text-gray-600">
+                {t('deleteConfirmBody')} <strong className="font-semibold text-gray-900">{modalState.data?.title}</strong>. {t('deleteConfirmHelp')}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="gap-2 sm:gap-2">
+              <AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700 focus:ring-red-600">
+                {t('deletePassword')}
+              </AlertDialogAction>
+            </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       </div>
