@@ -7,7 +7,7 @@ const AuthContext = createContext(undefined);
 export const isAbortError = (error) => {
   return (
     error?.name === 'AbortError' ||
-    (error instanceof DOMException && 
+    (error instanceof DOMException &&
      error.message.includes('signal is aborted'))
   );
 };
@@ -16,18 +16,15 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [session, setSession] = useState(null);
-  
-  // Loading states
+
   const [loading, setLoading] = useState(true);
   const [loadingProfile, setLoadingProfile] = useState(false);
-  
-  // Error states
+
   const [error, setError] = useState(null);
   const [profileLoadError, setProfileLoadError] = useState(null);
-  
+
   const mounted = useRef(true);
 
-  // Helper: Fetch profile safely
   const fetchProfile = useCallback(async (currentUser) => {
     if (!currentUser) {
        if (mounted.current) {
@@ -38,14 +35,13 @@ export const AuthProvider = ({ children }) => {
     }
 
     if (mounted.current) {
-        setLoadingProfile(true);
-        setProfileLoadError(null);
+      setLoadingProfile(true);
+      setProfileLoadError(null);
     }
 
     try {
       console.log('[useAuth] Fetching profile for:', currentUser.id);
 
-      // 1. Fetch Profile
       let { data: existingProfile, error: fetchError } = await supabase
         .from('profiles')
         .select('*')
@@ -58,85 +54,97 @@ export const AuthProvider = ({ children }) => {
           message: fetchError.message,
           details: fetchError.details
         });
-        
+
         if (mounted.current) {
-           setProfileLoadError(`Erro ao carregar perfil: ${fetchError.message}`);
+          setProfileLoadError(`Erro ao carregar perfil: ${fetchError.message}`);
         }
       }
 
-      // 2. If profile exists, validate it
       if (existingProfile) {
         if (existingProfile.is_active === false) {
-           throw new Error("Usuário desativado");
+          throw new Error("Usuário desativado");
         }
-        
+
         if (mounted.current) {
-           setProfile(existingProfile);
+          setProfile(existingProfile);
         }
       } else {
         console.log('[useAuth] No profile found for user. User might be new.');
         try {
-           const { data: newProfile, error: insertError } = await supabase
+          const profilePayload = {
+            id: currentUser.id,
+            email: currentUser.email,
+            full_name: currentUser.user_metadata?.full_name || currentUser.email.split('@')[0],
+            domain: currentUser.email.split('@')[1] || '',
+            avatar_url: currentUser.user_metadata?.avatar_url,
+            is_active: true,
+            is_admin: false,
+            role: 'viewer'
+          };
+
+          let { data: newProfile, error: insertError } = await supabase
             .from('profiles')
-            .insert([{
-              id: currentUser.id,
-              email: currentUser.email,
-              full_name: currentUser.user_metadata?.full_name || currentUser.email.split('@')[0],
-              domain: currentUser.email.split('@')[1] || '',
-              avatar_url: currentUser.user_metadata?.avatar_url,
-              is_active: true,
-              is_admin: false
-            }])
+            .insert([profilePayload])
             .select()
             .single();
-            
-            if (insertError) {
-                console.error('[useAuth] Failed to create auto-profile:', {
-                   status: insertError.code,
-                   message: insertError.message
-                });
-            } else if (mounted.current) {
-                setProfile(newProfile);
-            }
+
+          if (insertError?.code === 'PGRST204' || insertError?.message?.includes("'role'")) {
+            const fallbackPayload = { ...profilePayload };
+            delete fallbackPayload.role;
+            const fallback = await supabase
+              .from('profiles')
+              .insert([fallbackPayload])
+              .select()
+              .single();
+            newProfile = fallback.data;
+            insertError = fallback.error;
+          }
+
+          if (insertError) {
+            console.error('[useAuth] Failed to create auto-profile:', {
+              status: insertError.code,
+              message: insertError.message
+            });
+          } else if (mounted.current) {
+            setProfile(newProfile);
+          }
         } catch (createErr) {
-            console.error('[useAuth] Exception creating auto-profile:', createErr);
+          console.error('[useAuth] Exception creating auto-profile:', createErr);
         }
       }
 
     } catch (err) {
       console.error('[useAuth] Critical profile error:', err);
       if (mounted.current) {
-          const isCritical = err.message.includes('desativado');
+        const isCritical = err.message.includes('desativado');
 
-          if (isCritical) {
-            setError(err.message);
-            await supabase.auth.signOut();
-            setUser(null);
-            setProfile(null);
-            setSession(null);
-            return;
-          }
-          
-          setProfileLoadError(err.message || 'Erro ao carregar perfil.');
+        if (isCritical) {
+          setError(err.message);
+          await supabase.auth.signOut();
+          setUser(null);
+          setProfile(null);
+          setSession(null);
+          return;
+        }
+
+        setProfileLoadError(err.message || 'Erro ao carregar perfil.');
       }
     } finally {
       if (mounted.current) setLoadingProfile(false);
     }
   }, []);
 
-  // Initial Auth Check
   useEffect(() => {
     mounted.current = true;
 
     const initializeAuth = async () => {
       try {
         setLoading(true);
-        // 1. Get Session
         const { data: { session: initialSession }, error: sessionError } = await supabase.auth.getSession();
-        
+
         if (sessionError) {
-            console.error('[useAuth] Session error:', sessionError);
-            throw sessionError;
+          console.error('[useAuth] Session error:', sessionError);
+          throw sessionError;
         }
 
         if (mounted.current) {
@@ -144,11 +152,11 @@ export const AuthProvider = ({ children }) => {
             console.log('[useAuth] Session found for:', initialSession.user.email);
             setSession(initialSession);
             setUser(initialSession.user);
-            
+
             const validation = validateDomain(initialSession.user.email, import.meta.env.VITE_ALLOWED_DOMAIN);
             if (!validation.valid) {
-               console.warn('[useAuth] Invalid domain:', validation.message);
-               throw new Error(validation.message);
+              console.warn('[useAuth] Invalid domain:', validation.message);
+              throw new Error(validation.message);
             }
 
             fetchProfile(initialSession.user);
@@ -159,11 +167,11 @@ export const AuthProvider = ({ children }) => {
       } catch (err) {
         console.error('[useAuth] Initialization critical error:', err);
         if (mounted.current) {
-            setError(err.message);
-            await supabase.auth.signOut();
-            setUser(null);
-            setSession(null);
-            setProfile(null);
+          setError(err.message);
+          await supabase.auth.signOut();
+          setUser(null);
+          setSession(null);
+          setProfile(null);
         }
       } finally {
         if (mounted.current) setLoading(false);
@@ -172,31 +180,30 @@ export const AuthProvider = ({ children }) => {
 
     initializeAuth();
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
       console.log('[useAuth] Auth state change:', event);
       if (!mounted.current) return;
-      
+
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
-      
+
       if (currentSession?.user) {
         const validation = validateDomain(currentSession.user.email, import.meta.env.VITE_ALLOWED_DOMAIN);
         if (!validation.valid) {
-             setError(validation.message);
-             await supabase.auth.signOut();
-             return;
+          setError(validation.message);
+          await supabase.auth.signOut();
+          return;
         }
 
         if (!profile || profile.id !== currentSession.user.id) {
-           fetchProfile(currentSession.user);
+          fetchProfile(currentSession.user);
         }
       } else {
         setProfile(null);
         setError(null);
         setProfileLoadError(null);
       }
-      
+
       setLoading(false);
     });
 
@@ -226,19 +233,19 @@ export const AuthProvider = ({ children }) => {
 
   const signInWithEmail = async (email, password) => {
     try {
-        setLoading(true);
-        setError(null);
-        const { data, error } = await supabase.auth.signInWithPassword({
-            email,
-            password
-        });
-        if (error) throw error;
-        return data;
+      setLoading(true);
+      setError(null);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+      if (error) throw error;
+      return data;
     } catch (err) {
-        setError(err.message);
-        throw err;
+      setError(err.message);
+      throw err;
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -267,7 +274,7 @@ export const AuthProvider = ({ children }) => {
     error,
     profileLoadError,
     isAuthenticated: !!user,
-    isAdmin: profile?.is_admin === true,
+    isAdmin: profile?.is_admin === true || profile?.role === 'admin',
     signInWithGoogle,
     signInWithEmail,
     signOut,
