@@ -9,7 +9,8 @@ import {
   Eye,
   MoreHorizontal,
   Lock,
-  Users
+  Users,
+  ShieldQuestion
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import LoadingSpinner from '@/components/LoadingSpinner';
@@ -69,8 +70,8 @@ const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onV
     });
   };
 
-  const canEditSecret = (secret) => !secret.is_archived && ['owner', 'admin', 'edit', 'manage_access'].includes(secret.my_permission);
-  const canManageSecret = (secret) => ['owner', 'admin', 'manage_access'].includes(secret.my_permission);
+  const canEditSecret = (secret) => !secret.is_catalog_only && !secret.is_archived && ['owner', 'admin', 'edit', 'manage_access'].includes(secret.my_permission);
+  const canManageSecret = (secret) => !secret.is_catalog_only && ['owner', 'admin', 'manage_access'].includes(secret.my_permission);
 
   if (loading) {
     return <div className="py-10 flex justify-center"><LoadingSpinner size="lg" message="Carregando senhas..." /></div>;
@@ -151,9 +152,13 @@ const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onV
                 filteredSecrets.map(secret => (
                   <tr key={secret.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 font-medium text-gray-900">
-                      <button onClick={() => onView(secret)} className="hover:underline hover:text-blue-600 text-left">
-                        {secret.title}
-                      </button>
+                      {secret.is_catalog_only ? (
+                        <span className="text-left text-gray-800">{secret.title}</span>
+                      ) : (
+                        <button onClick={() => onView(secret)} className="hover:underline hover:text-blue-600 text-left">
+                          {secret.title}
+                        </button>
+                      )}
                       {secret.is_archived && (
                         <span className="ml-2 inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
                           {t('archived')}
@@ -189,7 +194,11 @@ const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onV
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      {secret.is_personal ? (
+                      {secret.is_catalog_only ? (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                          <ShieldQuestion className="w-3 h-3 mr-1" /> Acesso não liberado
+                        </span>
+                      ) : secret.is_personal ? (
                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-700">
                            <Lock className="w-3 h-3 mr-1" /> Pessoal
                          </span>
@@ -203,48 +212,52 @@ const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onV
                       {formatDate(secret.updated_at)}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => onView(secret)} className="h-8 w-8 p-0">
-                          <Eye className="h-4 w-4 text-gray-500" />
-                        </Button>
+                      {secret.is_catalog_only ? (
+                        <span className="text-xs text-gray-400">Solicite acesso</span>
+                      ) : (
+                        <div className="flex items-center justify-end gap-2">
+                          <Button variant="ghost" size="sm" onClick={() => onView(secret)} className="h-8 w-8 p-0">
+                            <Eye className="h-4 w-4 text-gray-500" />
+                          </Button>
 
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                              <MoreHorizontal className="h-4 w-4 text-gray-500" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => onView(secret)}>
-                              <Eye className="mr-2 h-4 w-4" /> Ver detalhes
-                            </DropdownMenuItem>
-
-                            {canEditSecret(secret) && (
-                              <DropdownMenuItem onClick={() => onEdit(secret)}>
-                                <Edit2 className="mr-2 h-4 w-4" /> Editar senha
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                <MoreHorizontal className="h-4 w-4 text-gray-500" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => onView(secret)}>
+                                <Eye className="mr-2 h-4 w-4" /> Ver detalhes
                               </DropdownMenuItem>
-                            )}
 
-                            {canManageSecret(secret) && !secret.is_archived && (
-                              <DropdownMenuItem onClick={() => onShare(secret)}>
-                                <Share2 className="mr-2 h-4 w-4" /> Compartilhar acesso
-                              </DropdownMenuItem>
-                            )}
+                              {canEditSecret(secret) && (
+                                <DropdownMenuItem onClick={() => onEdit(secret)}>
+                                  <Edit2 className="mr-2 h-4 w-4" /> Editar senha
+                                </DropdownMenuItem>
+                              )}
 
-                            {canManageSecret(secret) && !secret.is_archived && (
-                              <DropdownMenuItem onClick={() => onArchive(secret)} className="text-amber-700 focus:text-amber-700">
-                                <Archive className="mr-2 h-4 w-4" /> {t('archive')}
-                              </DropdownMenuItem>
-                            )}
+                              {canManageSecret(secret) && !secret.is_archived && (
+                                <DropdownMenuItem onClick={() => onShare(secret)}>
+                                  <Share2 className="mr-2 h-4 w-4" /> Compartilhar acesso
+                                </DropdownMenuItem>
+                              )}
 
-                            {canManageSecret(secret) && secret.is_archived && (
-                              <DropdownMenuItem onClick={() => onRestore(secret)} className="text-green-700 focus:text-green-700">
-                                <RotateCcw className="mr-2 h-4 w-4" /> {t('restore')}
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
+                              {canManageSecret(secret) && !secret.is_archived && (
+                                <DropdownMenuItem onClick={() => onArchive(secret)} className="text-amber-700 focus:text-amber-700">
+                                  <Archive className="mr-2 h-4 w-4" /> {t('archive')}
+                                </DropdownMenuItem>
+                              )}
+
+                              {canManageSecret(secret) && secret.is_archived && (
+                                <DropdownMenuItem onClick={() => onRestore(secret)} className="text-green-700 focus:text-green-700">
+                                  <RotateCcw className="mr-2 h-4 w-4" /> {t('restore')}
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))
