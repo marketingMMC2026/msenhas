@@ -76,6 +76,19 @@ alter table public.user_invitations
 create unique index if not exists user_invitations_email_unique
   on public.user_invitations (lower(email));
 
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'user_invitations_email_key'
+      and conrelid = 'public.user_invitations'::regclass
+  ) then
+    alter table public.user_invitations
+      add constraint user_invitations_email_key unique (email);
+  end if;
+end $$;
+
 alter table public.user_invitations enable row level security;
 
 drop policy if exists user_invitations_select_admin on public.user_invitations;
