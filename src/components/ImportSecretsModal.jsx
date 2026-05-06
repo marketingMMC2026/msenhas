@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuditLog } from '@/hooks/useAuditLog';
 import { encryptSecretText } from '@/lib/secretCrypto';
-import { Upload, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Upload, Loader2, CheckCircle2, AlertCircle, Wand2 } from 'lucide-react';
 
 const normalize = (value) => String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
@@ -23,6 +23,14 @@ const columnAliases = {
 };
 
 const splitList = (value) => String(value || '').split(/[|,]/).map((item) => item.trim()).filter(Boolean);
+const joinList = (items) => (items || []).join(', ');
+
+const normalizeUrl = (value) => {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return '';
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+};
 
 const splitCsvLine = (line) => {
   const cells = [];
@@ -49,6 +57,11 @@ const splitCsvLine = (line) => {
   return cells;
 };
 
+const buildRow = (row) => ({
+  ...row,
+  valid: Boolean(String(row.title || '').trim() && String(row.secretValue || '').trim()),
+});
+
 const parseCsv = (content) => {
   const lines = content.replace(/^\uFEFF/, '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (lines.length < 2) return { rows: [], errors: ['A planilha precisa ter cabecalho e pelo menos uma linha.'] };
@@ -71,20 +84,16 @@ const parseCsv = (content) => {
 
   const rows = lines.slice(1).map((line, index) => {
     const cells = splitCsvLine(line);
-    const title = cells[indexes.title]?.trim() || '';
-    const secretValue = cells[indexes.secretValue]?.trim() || '';
-    const groupNames = indexes.group >= 0 ? splitList(cells[indexes.group]) : [];
-    return {
+    return buildRow({
       rowNumber: index + 2,
-      title,
+      title: indexes.title >= 0 ? cells[indexes.title]?.trim() || '' : '',
       login: indexes.login >= 0 ? cells[indexes.login]?.trim() || '' : '',
-      secretValue,
+      secretValue: indexes.secretValue >= 0 ? cells[indexes.secretValue]?.trim() || '' : '',
       link: indexes.link >= 0 ? cells[indexes.link]?.trim() || '' : '',
       notes: indexes.notes >= 0 ? cells[indexes.notes]?.trim() || '' : '',
       tags: indexes.tags >= 0 ? splitList(cells[indexes.tags]) : [],
-      groupNames,
-      valid: Boolean(title && secretValue),
-    };
+      groupNames: indexes.group >= 0 ? splitList(cells[indexes.group]) : [],
+    });
   });
 
   return { rows, errors };
@@ -105,7 +114,7 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
 
   const validRows = useMemo(() => rows.filter((row) => row.valid), [rows]);
   const invalidRows = rows.length - validRows.length;
-  const groupsFromFile = useMemo(() => Array.from(new Set(validRows.flatMap((row) => row.groupNames))).sort(), [validRows]);
+  const groupsFromRows = useMemo(() => Array.from(new Set(validRows.flatMap((row) => row.groupNames))).sort(), [validRows]);
 
   const fetchTargets = async () => {
     if (!user?.id) return;
@@ -142,13 +151,33 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
     setErrors(parsed.errors);
   };
 
+  const updateRow = (rowNumber, patch) => {
+    setRows((current) => current.map((row) => row.rowNumber === rowNumber ? buildRow({ ...row, ...patch }) : row));
+  };
+
   const toggleSelection = (id, setter) => {
     setter((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   };
 
+  const applySelectedGroupsToRows = () => {
+    const selectedGroupNames = selectedGroups
+      .map((groupId) => availableGroups.find((group) => group.id === groupId)?.name)
+      .filter(Boolean);
+
+    if (selectedGroupNames.length === 0) {
+      toast({ title: 'Selecione um grupo', description: 'Marque pelo menos um grupo na lista antes de aplicar nas linhas.' });
+      return;
+    }
+
+    setRows((current) => current.map((row) => buildRow({
+      ...row,
+      groupNames: Array.from(new Set([...row.groupNames, ...selectedGroupNames])),
+    })));
+  };
+
   const ensureGroups = async () => {
     const groupMap = new Map(availableGroups.map((group) => [normalize(group.name), group]));
-    const missingNames = groupsFromFile.filter((name) => !groupMap.has(normalize(name)));
+    const missingNames = groupsFromRows.filter((name) => !groupMap.has(normalize(name)));
 
     if (missingNames.length > 0) {
       const { data, error } = await supabase
@@ -169,14 +198,14 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
     let insertedSecrets = [];
     try {
       const groupMap = await ensureGroups();
-      const hasSharedAccess = selectedUsers.length > 0 || selectedGroups.length > 0 || groupsFromFile.length > 0;
+      const hasSharedAccess = selectedUsers.length > 0 || selectedGroups.length > 0 || groupsFromRows.length > 0;
       const payloads = await Promise.all(validRows.map(async (row) => ({
         owner_id: user.id,
-        title: row.title,
-        login: row.login || null,
-        secret_value: await encryptSecretText(row.secretValue),
-        link: row.link || null,
-        notes: row.notes || null,
+        title: row.title.trim(),
+        login: row.login.trim() || null,
+        secret_value: await encryptSecretText(row.secretValue.trim()),
+        link: normalizeUrl(row.link) || null,
+        notes: row.notes.trim() || null,
         tags: row.tags,
         is_personal: !hasSharedAccess,
       })));
@@ -200,7 +229,7 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
         if (permissionsError) throw permissionsError;
       }
 
-      await logAction('import_secrets', 'import', insertedSecrets[0]?.id, { total: insertedSecrets.length, users: selectedUsers.length, groups: selectedGroups.length + groupsFromFile.length, permission: permissionLevel });
+      await logAction('import_secrets', 'import', insertedSecrets[0]?.id, { total: insertedSecrets.length, users: selectedUsers.length, groups: selectedGroups.length + groupsFromRows.length, permission: permissionLevel });
       toast({ title: 'Importacao concluida', description: `${insertedSecrets.length} senha(s) importada(s).` });
       onSuccess?.();
       handleClose();
@@ -214,11 +243,11 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Importar senhas por planilha</DialogTitle></DialogHeader>
         <div className="space-y-5">
           <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
-            Exporte sua planilha como CSV com colunas como <strong>titulo</strong>, <strong>login</strong>, <strong>senha</strong>, <strong>link</strong>, <strong>notas</strong>, <strong>tags</strong> e <strong>grupo</strong>. Grupos que nao existirem serao criados automaticamente.
+            Exporte sua planilha como CSV com colunas como <strong>titulo</strong>, <strong>login</strong>, <strong>senha</strong>, <strong>link</strong>, <strong>notas</strong>, <strong>tags</strong> e <strong>grupo</strong>. Depois revise tudo abaixo antes de importar; grupos que nao existirem serao criados automaticamente.
           </div>
           <div className="space-y-2">
             <Label htmlFor="csv-file">Arquivo CSV</Label>
@@ -226,10 +255,79 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
           </div>
           {errors.length > 0 && <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errors.map((error) => <div key={error} className="flex gap-2"><AlertCircle className="mt-0.5 h-4 w-4" /> {error}</div>)}</div>}
           {rows.length > 0 && <>
-            <div className="flex flex-wrap gap-3 text-sm"><span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-3 py-1 text-green-700"><CheckCircle2 className="h-4 w-4" /> {validRows.length} valida(s)</span>{invalidRows > 0 && <span className="inline-flex items-center gap-1 rounded-full bg-yellow-50 px-3 py-1 text-yellow-800"><AlertCircle className="h-4 w-4" /> {invalidRows} ignorada(s)</span>}{groupsFromFile.length > 0 && <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">{groupsFromFile.length} grupo(s) no arquivo</span>}</div>
-            <div className="max-h-48 overflow-auto rounded-lg border border-gray-200"><table className="w-full text-left text-sm"><thead className="bg-gray-50 text-gray-600"><tr><th className="px-3 py-2">Linha</th><th className="px-3 py-2">Titulo</th><th className="px-3 py-2">Login</th><th className="px-3 py-2">Grupo</th><th className="px-3 py-2">Status</th></tr></thead><tbody className="divide-y divide-gray-100">{rows.slice(0, 8).map((row) => <tr key={row.rowNumber}><td className="px-3 py-2 text-gray-500">{row.rowNumber}</td><td className="px-3 py-2 font-medium">{row.title || '-'}</td><td className="px-3 py-2">{row.login || '-'}</td><td className="px-3 py-2">{row.groupNames.join(', ') || '-'}</td><td className="px-3 py-2">{row.valid ? 'Pronta' : 'Faltam titulo/senha'}</td></tr>)}</tbody></table></div>
+            <div className="flex flex-wrap gap-3 text-sm">
+              <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-3 py-1 text-green-700"><CheckCircle2 className="h-4 w-4" /> {validRows.length} valida(s)</span>
+              {invalidRows > 0 && <span className="inline-flex items-center gap-1 rounded-full bg-yellow-50 px-3 py-1 text-yellow-800"><AlertCircle className="h-4 w-4" /> {invalidRows} incompleta(s)</span>}
+              {groupsFromRows.length > 0 && <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">{groupsFromRows.length} grupo(s) nas linhas</span>}
+            </div>
+
+            <div className="rounded-lg border border-gray-200 bg-white">
+              <div className="border-b border-gray-100 px-3 py-2 text-sm font-medium text-gray-700">Revise e ajuste antes de importar</div>
+              <div className="max-h-[420px] overflow-auto">
+                <table className="min-w-[1180px] w-full text-left text-xs">
+                  <thead className="sticky top-0 z-10 bg-gray-50 text-gray-600">
+                    <tr>
+                      <th className="px-2 py-2 w-14">Linha</th>
+                      <th className="px-2 py-2 w-44">Titulo *</th>
+                      <th className="px-2 py-2 w-44">Login</th>
+                      <th className="px-2 py-2 w-40">Senha *</th>
+                      <th className="px-2 py-2 w-48">Link</th>
+                      <th className="px-2 py-2 w-56">Notas</th>
+                      <th className="px-2 py-2 w-44">Tags</th>
+                      <th className="px-2 py-2 w-44">Grupos</th>
+                      <th className="px-2 py-2 w-28">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {rows.map((row) => (
+                      <tr key={row.rowNumber} className={row.valid ? 'bg-white' : 'bg-yellow-50/60'}>
+                        <td className="px-2 py-2 text-gray-500">{row.rowNumber}</td>
+                        <td className="px-2 py-2"><input value={row.title} onChange={(e) => updateRow(row.rowNumber, { title: e.target.value })} className="w-full rounded border border-gray-200 px-2 py-1" /></td>
+                        <td className="px-2 py-2"><input value={row.login} onChange={(e) => updateRow(row.rowNumber, { login: e.target.value })} className="w-full rounded border border-gray-200 px-2 py-1" /></td>
+                        <td className="px-2 py-2"><input value={row.secretValue} onChange={(e) => updateRow(row.rowNumber, { secretValue: e.target.value })} className="w-full rounded border border-gray-200 px-2 py-1" /></td>
+                        <td className="px-2 py-2"><input value={row.link} onChange={(e) => updateRow(row.rowNumber, { link: e.target.value })} onBlur={(e) => updateRow(row.rowNumber, { link: normalizeUrl(e.target.value) })} placeholder="https://..." className="w-full rounded border border-gray-200 px-2 py-1" /></td>
+                        <td className="px-2 py-2"><input value={row.notes} onChange={(e) => updateRow(row.rowNumber, { notes: e.target.value })} className="w-full rounded border border-gray-200 px-2 py-1" /></td>
+                        <td className="px-2 py-2"><input value={joinList(row.tags)} onChange={(e) => updateRow(row.rowNumber, { tags: splitList(e.target.value) })} className="w-full rounded border border-gray-200 px-2 py-1" /></td>
+                        <td className="px-2 py-2">
+                          <input
+                            value={joinList(row.groupNames)}
+                            onChange={(e) => updateRow(row.rowNumber, { groupNames: splitList(e.target.value) })}
+                            list="import-groups-list"
+                            placeholder="Marketing, Gestao"
+                            className="w-full rounded border border-gray-200 px-2 py-1"
+                          />
+                        </td>
+                        <td className="px-2 py-2">{row.valid ? 'Pronta' : 'Faltam dados'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <datalist id="import-groups-list">
+                {availableGroups.map((group) => <option key={group.id} value={group.name} />)}
+              </datalist>
+            </div>
           </>}
-          <div className="grid gap-4 md:grid-cols-2"><div className="space-y-2"><Label>Usuarios com acesso</Label><div className="max-h-40 overflow-auto rounded-md border border-gray-200 p-2">{availableUsers.length === 0 ? <p className="px-2 py-3 text-sm text-gray-500">Nenhum usuario disponivel.</p> : availableUsers.map((target) => <label key={target.id} className="flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-gray-50"><input type="checkbox" checked={selectedUsers.includes(target.id)} onChange={() => toggleSelection(target.id, setSelectedUsers)} /><span>{target.full_name || target.email}</span></label>)}</div></div><div className="space-y-2"><Label>Grupos com acesso</Label><div className="max-h-40 overflow-auto rounded-md border border-gray-200 p-2">{availableGroups.length === 0 ? <p className="px-2 py-3 text-sm text-gray-500">Nenhum grupo disponivel.</p> : availableGroups.map((group) => <label key={group.id} className="flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-gray-50"><input type="checkbox" checked={selectedGroups.includes(group.id)} onChange={() => toggleSelection(group.id, setSelectedGroups)} /><span>{group.name}</span></label>)}</div></div></div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Usuarios com acesso em todas as senhas</Label>
+              <div className="max-h-40 overflow-auto rounded-md border border-gray-200 p-2">
+                {availableUsers.length === 0 ? <p className="px-2 py-3 text-sm text-gray-500">Nenhum usuario disponivel.</p> : availableUsers.map((target) => <label key={target.id} className="flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-gray-50"><input type="checkbox" checked={selectedUsers.includes(target.id)} onChange={() => toggleSelection(target.id, setSelectedUsers)} /><span>{target.full_name || target.email}</span></label>)}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label>Grupos com acesso em todas as senhas</Label>
+                {rows.length > 0 && <Button type="button" variant="outline" size="sm" onClick={applySelectedGroupsToRows}><Wand2 className="mr-2 h-4 w-4" /> Aplicar nas linhas</Button>}
+              </div>
+              <div className="max-h-40 overflow-auto rounded-md border border-gray-200 p-2">
+                {availableGroups.length === 0 ? <p className="px-2 py-3 text-sm text-gray-500">Nenhum grupo disponivel.</p> : availableGroups.map((group) => <label key={group.id} className="flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-gray-50"><input type="checkbox" checked={selectedGroups.includes(group.id)} onChange={() => toggleSelection(group.id, setSelectedGroups)} /><span>{group.name}</span></label>)}
+              </div>
+              <p className="text-xs text-gray-500">Voce tambem pode digitar grupos diferentes diretamente em cada linha da tabela.</p>
+            </div>
+          </div>
+
           <div className="space-y-2"><Label>Nivel de permissao para os acessos selecionados</Label><Select value={permissionLevel} onValueChange={setPermissionLevel}><SelectTrigger className="max-w-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="view">Visualizar</SelectItem><SelectItem value="edit">Editar</SelectItem><SelectItem value="manage_access">Gerenciar acessos</SelectItem></SelectContent></Select></div>
         </div>
         <DialogFooter><Button type="button" variant="outline" onClick={handleClose} disabled={loading}>Cancelar</Button><Button onClick={handleImport} disabled={loading || validRows.length === 0} className="bg-blue-600 text-white hover:bg-blue-700">{loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Importando...</> : <><Upload className="mr-2 h-4 w-4" /> Importar senhas</>}</Button></DialogFooter>
