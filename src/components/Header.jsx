@@ -34,7 +34,6 @@ const Header = ({ onMenuClick }) => {
     <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-40">
       <div className="px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Left: Logo and Menu Toggle */}
           <div className="flex items-center gap-4">
             <button
               onClick={onMenuClick}
@@ -44,11 +43,10 @@ const Header = ({ onMenuClick }) => {
               <Menu className="h-6 w-6 text-gray-600" />
             </button>
             <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              MSENHAS
+              M Password
             </h1>
           </div>
 
-          {/* Right: User Info */}
           <div className="flex items-center gap-4">
             <div className="relative">
               <button
