@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Helmet } from 'react-helmet';
-import { Plus, RefreshCw, AlertCircle, Upload, Trash2 } from 'lucide-react';
+import { Plus, RefreshCw, AlertCircle, Upload, Archive } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { useSecrets } from '@/hooks/useSecrets';
@@ -21,6 +21,7 @@ const VaultPage = () => {
   const { toast } = useToast();
   const { logAction } = useAuditLog();
   const { t } = useLanguage();
+  const [showArchived, setShowArchived] = useState(false);
   const [modalState, setModalState] = useState({ type: null, data: null });
 
   const closeModal = () => setModalState({ type: null, data: null });
@@ -30,7 +31,7 @@ const VaultPage = () => {
   const fetchSecretDetails = async (secret) => {
     const { data, error } = await supabase.from('secrets').select('*, owner:profiles(email)').eq('id', secret.id).single();
     if (error) throw error;
-    return { ...secret, ...data, my_permission: secret.my_permission, access_type: secret.access_type, owner_email: data.owner?.email || secret.owner_email };
+    return { ...secret, ...data, is_archived: Boolean(data.deleted_at), my_permission: secret.my_permission, access_type: secret.access_type, owner_email: data.owner?.email || secret.owner_email };
   };
 
   const handleView = async (secret) => {
@@ -42,28 +43,44 @@ const VaultPage = () => {
     catch (err) { const formattedError = handleSupabaseError(err, 'Fetch Secret Details'); toast({ title: 'Erro', description: formattedError.message, variant: 'destructive' }); }
   };
   const handleShare = (secret) => setModalState({ type: 'share', data: secret });
-  const handleDeleteClick = (secret) => setModalState({ type: 'delete', data: secret });
+  const handleArchiveClick = (secret) => setModalState({ type: 'archive', data: secret });
 
-  const confirmDelete = async () => {
+  const handleArchiveError = (err) => {
+    const formattedError = handleSupabaseError(err, 'Archive Secret');
+    const isPolicyError = formattedError.message?.toLowerCase().includes('row-level security');
+    if (!formattedError.isAbort) {
+      toast({
+        title: t('deleteFailedTitle'),
+        description: isPolicyError ? t('deletePolicyError') : formattedError.message,
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const confirmArchive = async () => {
     const secret = modalState.data;
     if (!secret) return;
     try {
       const { error } = await supabase.from('secrets').update({ deleted_at: new Date().toISOString() }).eq('id', secret.id);
       if (error) throw error;
-      await logAction('delete_secret', 'secret', secret.id, sanitizeAuditDetails({ title: secret.title }));
-      toast({ title: t('deleted'), description: t('passwordDeleted') });
+      await logAction('archive_secret', 'secret', secret.id, sanitizeAuditDetails({ title: secret.title }));
+      toast({ title: t('archivedSuccess'), description: t('archivedDescription') });
       refresh();
       closeModal();
     } catch (err) {
-      const formattedError = handleSupabaseError(err, 'Delete Secret');
-      const isPolicyError = formattedError.message?.toLowerCase().includes('row-level security');
-      if (!formattedError.isAbort) {
-        toast({
-          title: t('deleteFailedTitle'),
-          description: isPolicyError ? t('deletePolicyError') : formattedError.message,
-          variant: 'destructive'
-        });
-      }
+      handleArchiveError(err);
+    }
+  };
+
+  const handleRestore = async (secret) => {
+    try {
+      const { error } = await supabase.from('secrets').update({ deleted_at: null }).eq('id', secret.id);
+      if (error) throw error;
+      await logAction('restore_secret', 'secret', secret.id, sanitizeAuditDetails({ title: secret.title }));
+      toast({ title: t('restoredSuccess'), description: t('restoredDescription') });
+      refresh();
+    } catch (err) {
+      handleArchiveError(err);
     }
   };
 
@@ -86,26 +103,26 @@ const VaultPage = () => {
         </div>
 
         {error && <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg flex items-center justify-between"><div className="flex items-center gap-2"><AlertCircle className="h-5 w-5" /><span>{t('loadPasswordsError')}: {error}</span></div><Button variant="ghost" size="sm" onClick={refresh} className="text-red-700 hover:bg-red-100">{t('retry')}</Button></div>}
-        <SecretTable secrets={secrets} loading={loading} onView={handleView} onEdit={handleEdit} onShare={handleShare} onDelete={handleDeleteClick} />
+        <SecretTable secrets={secrets} loading={loading} showArchived={showArchived} onShowArchivedChange={setShowArchived} onView={handleView} onEdit={handleEdit} onShare={handleShare} onArchive={handleArchiveClick} onRestore={handleRestore} />
         <SecretModal isOpen={modalState.type === 'create' || modalState.type === 'edit'} onClose={closeModal} secret={modalState.data} onSuccess={handleSuccess} />
-        <SecretViewModal isOpen={modalState.type === 'view'} onClose={closeModal} secret={modalState.data} onEdit={() => handleEdit(modalState.data)} onShare={() => handleShare(modalState.data)} onDelete={() => handleDeleteClick(modalState.data)} />
+        <SecretViewModal isOpen={modalState.type === 'view'} onClose={closeModal} secret={modalState.data} onEdit={() => handleEdit(modalState.data)} onShare={() => handleShare(modalState.data)} onArchive={() => handleArchiveClick(modalState.data)} onRestore={() => handleRestore(modalState.data)} />
         <ShareSecretModal isOpen={modalState.type === 'share'} onClose={closeModal} secret={modalState.data} />
         <ImportSecretsModal isOpen={modalState.type === 'import'} onClose={closeModal} onSuccess={handleSuccess} />
-        <AlertDialog open={modalState.type === 'delete'} onOpenChange={(open) => !open && closeModal()}>
+        <AlertDialog open={modalState.type === 'archive'} onOpenChange={(open) => !open && closeModal()}>
           <AlertDialogContent className="max-w-md">
             <AlertDialogHeader className="space-y-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-red-50 text-red-600">
-                <Trash2 className="h-5 w-5" />
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+                <Archive className="h-5 w-5" />
               </div>
-              <AlertDialogTitle className="text-xl">{t('deleteConfirmTitle')}</AlertDialogTitle>
+              <AlertDialogTitle className="text-xl">{t('archiveConfirmTitle')}</AlertDialogTitle>
               <AlertDialogDescription className="text-base leading-6 text-gray-600">
-                {t('deleteConfirmBody')} <strong className="font-semibold text-gray-900">{modalState.data?.title}</strong>. {t('deleteConfirmHelp')}
+                {t('archiveConfirmBody')} <strong className="font-semibold text-gray-900">{modalState.data?.title}</strong>. {t('archiveConfirmHelp')}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter className="gap-2 sm:gap-2">
               <AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700 focus:ring-red-600">
-                {t('deletePassword')}
+              <AlertDialogAction onClick={confirmArchive} className="bg-amber-600 hover:bg-amber-700 focus:ring-amber-600">
+                {t('archivePassword')}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
