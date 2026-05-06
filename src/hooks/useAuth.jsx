@@ -25,6 +25,26 @@ export const AuthProvider = ({ children }) => {
 
   const mounted = useRef(true);
 
+  const applyPendingInvite = useCallback(async (baseProfile) => {
+    try {
+      const { data, error: inviteError } = await supabase.rpc('accept_pending_invite');
+      if (inviteError) {
+        if (inviteError.code !== '42883') {
+          console.warn('[useAuth] Pending invitation was not applied:', inviteError.message);
+        }
+        return baseProfile;
+      }
+
+      if (data?.profile) {
+        return data.profile;
+      }
+    } catch (err) {
+      console.warn('[useAuth] Pending invitation check failed:', err.message);
+    }
+
+    return baseProfile;
+  }, []);
+
   const fetchProfile = useCallback(async (currentUser) => {
     if (!currentUser) {
        if (mounted.current) {
@@ -62,14 +82,15 @@ export const AuthProvider = ({ children }) => {
 
       if (existingProfile) {
         if (existingProfile.is_active === false) {
-          throw new Error("Usuário desativado");
+          throw new Error('Usuario desativado');
         }
 
+        const invitedProfile = await applyPendingInvite(existingProfile);
         if (mounted.current) {
-          setProfile(existingProfile);
+          setProfile(invitedProfile || existingProfile);
         }
       } else {
-        console.log('[useAuth] No profile found for user. User might be new.');
+        console.log('[useAuth] No profile found for user. Creating restricted default profile.');
         try {
           const profilePayload = {
             id: currentUser.id,
@@ -105,8 +126,11 @@ export const AuthProvider = ({ children }) => {
               status: insertError.code,
               message: insertError.message
             });
-          } else if (mounted.current) {
-            setProfile(newProfile);
+          } else {
+            const invitedProfile = await applyPendingInvite(newProfile);
+            if (mounted.current) {
+              setProfile(invitedProfile || newProfile);
+            }
           }
         } catch (createErr) {
           console.error('[useAuth] Exception creating auto-profile:', createErr);
@@ -132,7 +156,7 @@ export const AuthProvider = ({ children }) => {
     } finally {
       if (mounted.current) setLoadingProfile(false);
     }
-  }, []);
+  }, [applyPendingInvite]);
 
   useEffect(() => {
     mounted.current = true;
@@ -231,24 +255,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const signInWithEmail = async (email, password) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
-      if (error) throw error;
-      return data;
-    } catch (err) {
-      setError(err.message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const signOut = async () => {
     try {
       setLoading(true);
@@ -276,7 +282,6 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated: !!user,
     isAdmin: profile?.is_admin === true || profile?.role === 'admin',
     signInWithGoogle,
-    signInWithEmail,
     signOut,
     validateDomain,
     isAbortError
