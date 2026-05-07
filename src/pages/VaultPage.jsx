@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { useSecrets } from '@/hooks/useSecrets';
 import { useAuditLog } from '@/hooks/useAuditLog';
+import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { handleSupabaseError } from '@/utils/handleSupabaseError';
@@ -18,6 +19,7 @@ import ImportSecretsModal from '@/components/ImportSecretsModal';
 
 const VaultPage = () => {
   const { secrets, loading, error, refresh } = useSecrets();
+  const { can } = useAuth();
   const { toast } = useToast();
   const { logAction } = useAuditLog();
   const { t } = useLanguage();
@@ -25,9 +27,15 @@ const VaultPage = () => {
   const [modalState, setModalState] = useState({ type: null, data: null });
 
   const closeModal = () => setModalState({ type: null, data: null });
-  const handleCreate = () => setModalState({ type: 'create', data: null });
-  const handleImport = () => setModalState({ type: 'import', data: null });
-  
+  const handleCreate = () => {
+    if (!can('createSecrets')) return;
+    setModalState({ type: 'create', data: null });
+  };
+  const handleImport = () => {
+    if (!can('importSecrets')) return;
+    setModalState({ type: 'import', data: null });
+  };
+
   const fetchSecretDetails = async (secret) => {
     const { data, error } = await supabase.from('secrets').select('*, owner:profiles(email)').eq('id', secret.id).single();
     if (error) throw error;
@@ -39,11 +47,18 @@ const VaultPage = () => {
     catch (err) { const formattedError = handleSupabaseError(err, 'Fetch Secret Details'); toast({ title: 'Erro', description: formattedError.message, variant: 'destructive' }); }
   };
   const handleEdit = async (secret) => {
+    if (!can('editSecrets')) return;
     try { setModalState({ type: 'edit', data: await fetchSecretDetails(secret) }); }
     catch (err) { const formattedError = handleSupabaseError(err, 'Fetch Secret Details'); toast({ title: 'Erro', description: formattedError.message, variant: 'destructive' }); }
   };
-  const handleShare = (secret) => setModalState({ type: 'share', data: secret });
-  const handleArchiveClick = (secret) => setModalState({ type: 'archive', data: secret });
+  const handleShare = (secret) => {
+    if (!can('managePermissions')) return;
+    setModalState({ type: 'share', data: secret });
+  };
+  const handleArchiveClick = (secret) => {
+    if (!can('archiveSecrets')) return;
+    setModalState({ type: 'archive', data: secret });
+  };
 
   const handleArchiveError = (err) => {
     const formattedError = handleSupabaseError(err, 'Archive Secret');
@@ -59,7 +74,7 @@ const VaultPage = () => {
 
   const confirmArchive = async () => {
     const secret = modalState.data;
-    if (!secret) return;
+    if (!secret || !can('archiveSecrets')) return;
     try {
       const { error } = await supabase.from('secrets').update({ deleted_at: new Date().toISOString() }).eq('id', secret.id);
       if (error) throw error;
@@ -73,6 +88,7 @@ const VaultPage = () => {
   };
 
   const handleRestore = async (secret) => {
+    if (!can('archiveSecrets')) return;
     try {
       const { error } = await supabase.from('secrets').update({ deleted_at: null }).eq('id', secret.id);
       if (error) throw error;
@@ -97,8 +113,8 @@ const VaultPage = () => {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="icon" onClick={refresh} title={t('refresh')}><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></Button>
-            <Button variant="outline" onClick={handleImport} className="gap-2"><Upload className="h-4 w-4" /> {t('import')}</Button>
-            <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 text-white gap-2"><Plus className="h-4 w-4" /> {t('newPassword')}</Button>
+            {can('importSecrets') && <Button variant="outline" onClick={handleImport} className="gap-2"><Upload className="h-4 w-4" /> {t('import')}</Button>}
+            {can('createSecrets') && <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 text-white gap-2"><Plus className="h-4 w-4" /> {t('newPassword')}</Button>}
           </div>
         </div>
 
@@ -107,7 +123,7 @@ const VaultPage = () => {
         <SecretModal isOpen={modalState.type === 'create' || modalState.type === 'edit'} onClose={closeModal} secret={modalState.data} onSuccess={handleSuccess} />
         <SecretViewModal isOpen={modalState.type === 'view'} onClose={closeModal} secret={modalState.data} onEdit={() => handleEdit(modalState.data)} onShare={() => handleShare(modalState.data)} onArchive={() => handleArchiveClick(modalState.data)} onRestore={() => handleRestore(modalState.data)} />
         <ShareSecretModal isOpen={modalState.type === 'share'} onClose={closeModal} secret={modalState.data} />
-        <ImportSecretsModal isOpen={modalState.type === 'import'} onClose={closeModal} onSuccess={handleSuccess} />
+        {can('importSecrets') && <ImportSecretsModal isOpen={modalState.type === 'import'} onClose={closeModal} onSuccess={handleSuccess} />}
         <AlertDialog open={modalState.type === 'archive'} onOpenChange={(open) => !open && closeModal()}>
           <AlertDialogContent className="max-w-md">
             <AlertDialogHeader className="space-y-3">
