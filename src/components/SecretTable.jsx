@@ -21,9 +21,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/hooks/useAuth';
 
 const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onView, onEdit, onArchive, onRestore, onShare }) => {
   const { t } = useLanguage();
+  const { can } = useAuth();
   const [search, setSearch] = useState('');
   const [selectedTags, setSelectedTags] = useState([]);
 
@@ -70,8 +72,9 @@ const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onV
     });
   };
 
-  const canEditSecret = (secret) => !secret.is_catalog_only && !secret.is_archived && ['owner', 'admin', 'edit', 'manage_access'].includes(secret.my_permission);
-  const canManageSecret = (secret) => !secret.is_catalog_only && ['owner', 'admin', 'manage_access'].includes(secret.my_permission);
+  const canEditSecret = (secret) => can('editSecrets') && !secret.is_catalog_only && !secret.is_archived && ['owner', 'admin', 'edit', 'manage_access'].includes(secret.my_permission);
+  const canShareSecret = (secret) => can('managePermissions') && !secret.is_catalog_only && ['owner', 'admin', 'manage_access'].includes(secret.my_permission);
+  const canArchiveSecret = (secret) => can('archiveSecrets') && !secret.is_catalog_only && ['owner', 'admin', 'manage_access'].includes(secret.my_permission);
 
   if (loading) {
     return <div className="py-10 flex justify-center"><LoadingSpinner size="lg" message="Carregando senhas..." /></div>;
@@ -196,7 +199,7 @@ const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onV
                     <td className="px-4 py-3">
                       {secret.is_catalog_only ? (
                         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                          <ShieldQuestion className="w-3 h-3 mr-1" /> Acesso não liberado
+                          <ShieldQuestion className="w-3 h-3 mr-1" /> Acesso nao liberado
                         </span>
                       ) : secret.is_personal ? (
                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-700">
@@ -237,19 +240,19 @@ const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onV
                                 </DropdownMenuItem>
                               )}
 
-                              {canManageSecret(secret) && !secret.is_archived && (
+                              {canShareSecret(secret) && !secret.is_archived && (
                                 <DropdownMenuItem onClick={() => onShare(secret)}>
                                   <Share2 className="mr-2 h-4 w-4" /> Compartilhar acesso
                                 </DropdownMenuItem>
                               )}
 
-                              {canManageSecret(secret) && !secret.is_archived && (
+                              {canArchiveSecret(secret) && !secret.is_archived && (
                                 <DropdownMenuItem onClick={() => onArchive(secret)} className="text-amber-700 focus:text-amber-700">
                                   <Archive className="mr-2 h-4 w-4" /> {t('archive')}
                                 </DropdownMenuItem>
                               )}
 
-                              {canManageSecret(secret) && secret.is_archived && (
+                              {canArchiveSecret(secret) && secret.is_archived && (
                                 <DropdownMenuItem onClick={() => onRestore(secret)} className="text-green-700 focus:text-green-700">
                                   <RotateCcw className="mr-2 h-4 w-4" /> {t('restore')}
                                 </DropdownMenuItem>
