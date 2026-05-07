@@ -11,7 +11,7 @@ import { Info, MailPlus } from 'lucide-react';
 
 const roleOptions = [
   { value: 'admin', label: 'Admin do sistema', description: 'Gerencia usuarios, grupos e senhas da agencia.' },
-  { value: 'manager', label: 'Gestor', description: 'Cria senhas, gerencia acessos e organiza grupos.' },
+  { value: 'manager', label: 'Gestor', description: 'Convida usuarios, gerencia grupos, ve logs e organiza acessos. Nao importa senhas.' },
   { value: 'editor', label: 'Editor', description: 'Cria e edita senhas permitidas.' },
   { value: 'viewer', label: 'Visualizador', description: 'Apenas visualiza senhas compartilhadas.' },
 ];
@@ -27,12 +27,17 @@ const UsersPage = () => {
   const [invitations, setInvitations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, role: currentRole, isAdmin, can } = useAuth();
   const { toast } = useToast();
   const { logAction } = useAuditLog();
 
   const [updatingRole, setUpdatingRole] = useState({});
   const [togglingActive, setTogglingActive] = useState({});
+
+  const availableRoleOptions = useMemo(() => {
+    if (isAdmin) return roleOptions;
+    return roleOptions.filter((option) => option.value !== 'admin');
+  }, [isAdmin]);
 
   const groupNameById = useMemo(() => {
     const map = new Map();
@@ -82,6 +87,15 @@ const UsersPage = () => {
       return;
     }
 
+    if (!isAdmin && (targetUser.is_admin || targetUser.role === 'admin' || nextRole === 'admin')) {
+      toast({
+        variant: 'destructive',
+        title: 'Acao restrita ao Admin',
+        description: 'Gestores podem criar e organizar usuarios, mas nao podem alterar administradores.'
+      });
+      return;
+    }
+
     setUpdatingRole(prev => ({ ...prev, [targetUser.id]: true }));
 
     try {
@@ -111,6 +125,11 @@ const UsersPage = () => {
     if (targetUser.id === currentUser.id) {
         toast({ variant: 'destructive', title: 'Acao bloqueada', description: 'Voce nao pode desativar sua propria conta.' });
         return;
+    }
+
+    if (!isAdmin && (targetUser.is_admin || targetUser.role === 'admin')) {
+      toast({ variant: 'destructive', title: 'Acao restrita ao Admin', description: 'Gestores nao podem desativar administradores.' });
+      return;
     }
 
     const newStatus = !targetUser.is_active;
@@ -158,9 +177,11 @@ const UsersPage = () => {
             <h1 className="text-3xl font-bold text-gray-900">Gerenciamento de Usuarios</h1>
             <p className="text-gray-600 mt-2">Convide pessoas, defina grupos e controle o nivel operacional de cada acesso.</p>
           </div>
-          <Button onClick={() => setInviteModalOpen(true)} className="bg-blue-600 text-white hover:bg-blue-700">
-            <MailPlus className="mr-2 h-4 w-4" /> Convidar usuario
-          </Button>
+          {can('inviteUsers') && (
+            <Button onClick={() => setInviteModalOpen(true)} className="bg-blue-600 text-white hover:bg-blue-700">
+              <MailPlus className="mr-2 h-4 w-4" /> Convidar usuario
+            </Button>
+          )}
         </div>
 
         <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
@@ -169,7 +190,7 @@ const UsersPage = () => {
             <div>
               <h3 className="text-sm font-medium text-blue-800">Como funciona o acesso</h3>
               <p className="text-sm text-blue-700 mt-1">
-                O login e feito apenas com Google. Se alguem entrar sem convite, acessa somente as proprias senhas. Para liberar senhas da equipe, o admin cria um convite e seleciona os grupos antes do primeiro acesso.
+                O login e feito apenas com Google. Se alguem entrar sem convite, acessa somente as proprias senhas. Para liberar senhas da equipe, o admin ou gestor cria um convite e seleciona os grupos antes do primeiro acesso.
               </p>
             </div>
           </div>
@@ -224,6 +245,7 @@ const UsersPage = () => {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="border-b border-gray-200 px-6 py-4">
             <h2 className="font-semibold text-gray-900">Usuarios ativos no sistema</h2>
+            <p className="mt-1 text-sm text-gray-500">Seu perfil atual: {roleLabel(currentRole, currentRole === 'admin')}.</p>
           </div>
           {loading ? (
             <LoadingSpinner size="lg" text="Carregando usuarios..." className="py-12" />
@@ -243,7 +265,8 @@ const UsersPage = () => {
                     <tr><td colSpan="4" className="px-6 py-12 text-center text-gray-500">Nenhum usuario encontrado.</td></tr>
                   ) : (
                     users.map((u) => {
-                      const currentRole = u.is_admin ? 'admin' : (u.role || 'viewer');
+                      const currentUserRole = u.is_admin ? 'admin' : (u.role || 'viewer');
+                      const isProtectedAdmin = !isAdmin && currentUserRole === 'admin';
                       return (
                         <tr key={u.id} className="hover:bg-gray-50 transition-colors">
                           <td className="px-6 py-4">
@@ -255,11 +278,11 @@ const UsersPage = () => {
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <select value={currentRole} onChange={(event) => handleRoleChange(u, event.target.value)} disabled={updatingRole[u.id]} className="w-full max-w-xs rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60">
-                              {roleOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                            <select value={currentUserRole} onChange={(event) => handleRoleChange(u, event.target.value)} disabled={updatingRole[u.id] || isProtectedAdmin} className="w-full max-w-xs rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60">
+                              {(isProtectedAdmin ? roleOptions : availableRoleOptions).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                             </select>
                           </td>
-                          <td className="px-6 py-4 text-center"><div className="flex justify-center"><input type="checkbox" checked={u.is_active || false} onChange={() => handleToggleActive(u)} disabled={togglingActive[u.id]} className="h-5 w-5 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-all" /></div></td>
+                          <td className="px-6 py-4 text-center"><div className="flex justify-center"><input type="checkbox" checked={u.is_active || false} onChange={() => handleToggleActive(u)} disabled={togglingActive[u.id] || isProtectedAdmin} className="h-5 w-5 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-all" /></div></td>
                           <td className="px-6 py-4 text-right text-gray-500">{new Date(u.created_at).toLocaleDateString()}</td>
                         </tr>
                       );
