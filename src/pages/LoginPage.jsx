@@ -7,6 +7,8 @@ import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 
+const getAppOrigin = () => (import.meta.env.VITE_APP_URL || window.location.origin).replace(/\/$/, '');
+
 const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -26,8 +28,7 @@ const LoginPage = () => {
     if (!configValid) return;
     setIsGoogleLoading(true);
     try {
-      const origin = window.location.origin;
-      const redirectUrl = `${origin}/auth/callback`;
+      const redirectUrl = `${getAppOrigin()}/auth/callback`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: redirectUrl, queryParams: { access_type: 'offline', prompt: 'consent' } }
