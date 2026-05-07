@@ -11,14 +11,14 @@ import { Loader2, Mail, Users } from 'lucide-react';
 const roleOptions = [
   { value: 'viewer', label: 'Viewer', uiLabel: 'Visualizador', description: 'Entra no sistema e acessa apenas senhas liberadas por grupo.' },
   { value: 'editor', label: 'Editor', uiLabel: 'Editor', description: 'Pode criar e editar senhas permitidas.' },
-  { value: 'manager', label: 'Manager', uiLabel: 'Gestor', description: 'Pode organizar acessos e gerenciar grupos operacionais.' },
+  { value: 'manager', label: 'Manager', uiLabel: 'Gestor', description: 'Pode convidar usuarios, gerenciar grupos, ver logs e organizar acessos. Nao importa senhas.' },
   { value: 'admin', label: 'System Admin', uiLabel: 'Admin do sistema', description: 'Acesso total ao sistema.' },
 ];
 
 const getAppOrigin = () => (import.meta.env.VITE_APP_URL || window.location.origin).replace(/\/$/, '');
 
 const UserInviteModal = ({ open, onOpenChange, onSuccess }) => {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { toast } = useToast();
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
@@ -28,10 +28,15 @@ const UserInviteModal = ({ open, onOpenChange, onSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [loadingGroups, setLoadingGroups] = useState(false);
 
+  const availableRoleOptions = useMemo(() => isAdmin ? roleOptions : roleOptions.filter((option) => option.value !== 'admin'), [isAdmin]);
   const selectedRole = useMemo(() => roleOptions.find((option) => option.value === role), [role]);
   const selectedGroupNames = useMemo(() => selectedGroups
     .map((groupId) => groups.find((group) => group.id === groupId)?.name)
     .filter(Boolean), [selectedGroups, groups]);
+
+  useEffect(() => {
+    if (!isAdmin && role === 'admin') setRole('viewer');
+  }, [isAdmin, role]);
 
   useEffect(() => {
     const fetchGroups = async () => {
@@ -95,6 +100,11 @@ const UserInviteModal = ({ open, onOpenChange, onSuccess }) => {
 
     if (!cleanEmail || !cleanEmail.includes('@')) {
       toast({ variant: 'destructive', title: 'E-mail invalido', description: 'Informe o e-mail da pessoa convidada.' });
+      return;
+    }
+
+    if (!isAdmin && role === 'admin') {
+      toast({ variant: 'destructive', title: 'Acao restrita ao Admin', description: 'Gestores nao podem criar convites de administrador.' });
       return;
     }
 
@@ -181,7 +191,7 @@ const UserInviteModal = ({ open, onOpenChange, onSuccess }) => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {roleOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.uiLabel}</SelectItem>)}
+                {availableRoleOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.uiLabel}</SelectItem>)}
               </SelectContent>
             </Select>
             <p className="text-xs text-gray-500">{selectedRole?.description}</p>
