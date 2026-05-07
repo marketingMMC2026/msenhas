@@ -3,18 +3,20 @@ import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, Lock, FileText, Users, User, FileBarChart, Settings, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/hooks/useAuth';
 
 const Sidebar = ({ isOpen, onClose }) => {
   const { t } = useLanguage();
+  const { can } = useAuth();
   const navItems = [
     { path: '/dashboard', label: t('dashboard'), icon: LayoutDashboard },
     { path: '/vault', label: t('vault'), icon: Lock },
     { path: '/requests', label: t('requests'), icon: FileText },
-    { path: '/groups', label: t('groups'), icon: Users },
-    { path: '/users', label: t('users'), icon: User },
-    { path: '/logs', label: t('logs'), icon: FileBarChart },
-    { path: '/settings', label: t('settings'), icon: Settings },
-  ];
+    { path: '/groups', label: t('groups'), icon: Users, capability: 'manageGroups' },
+    { path: '/users', label: t('users'), icon: User, capability: 'manageUsers' },
+    { path: '/logs', label: t('logs'), icon: FileBarChart, capability: 'viewLogs' },
+    { path: '/settings', label: t('settings'), icon: Settings, capability: 'manageSettings' },
+  ].filter((item) => !item.capability || can(item.capability));
 
   return (
     <>
