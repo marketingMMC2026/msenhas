@@ -15,6 +15,8 @@ const roleOptions = [
   { value: 'admin', label: 'System Admin', uiLabel: 'Admin do sistema', description: 'Acesso total ao sistema.' },
 ];
 
+const getAppOrigin = () => (import.meta.env.VITE_APP_URL || window.location.origin).replace(/\/$/, '');
+
 const UserInviteModal = ({ open, onOpenChange, onSuccess }) => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -65,7 +67,7 @@ const UserInviteModal = ({ open, onOpenChange, onSuccess }) => {
       : [...current, groupId]);
   };
 
-  const buildInviteUrl = (targetEmail) => `${window.location.origin}/login?invite=${encodeURIComponent(targetEmail)}`;
+  const buildInviteUrl = (targetEmail) => `${getAppOrigin()}/login?invite=${encodeURIComponent(targetEmail)}`;
 
   const sendInviteEmail = async (targetEmail) => {
     const response = await fetch('/api/send-invite', {
