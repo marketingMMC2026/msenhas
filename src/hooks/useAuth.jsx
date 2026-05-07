@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { validateDomain } from '@/utils/validateDomain';
+import { getCapabilities, getUserRole, hasCapability } from '@/lib/permissions';
 
 const AuthContext = createContext(undefined);
 
@@ -271,6 +272,10 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const role = getUserRole(profile);
+  const capabilities = getCapabilities(profile);
+  const can = (capability) => hasCapability(profile, capability);
+
   const value = {
     user,
     profile,
@@ -279,8 +284,11 @@ export const AuthProvider = ({ children }) => {
     loadingProfile,
     error,
     profileLoadError,
+    role,
+    capabilities,
+    can,
     isAuthenticated: !!user,
-    isAdmin: profile?.is_admin === true || profile?.role === 'admin',
+    isAdmin: role === 'admin',
     signInWithGoogle,
     signOut,
     validateDomain,
