@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import ScrollToTop from '@/components/ScrollToTop';
 import ProtectedRoute from '@/components/ProtectedRoute';
-import ProtectedAdminRoute from '@/components/ProtectedAdminRoute';
+import ProtectedCapabilityRoute from '@/components/ProtectedCapabilityRoute';
 import AppShell from '@/components/AppShell';
 import LoginPage from '@/pages/LoginPage';
 import AuthCallback from '@/pages/AuthCallback';
@@ -19,14 +19,11 @@ function App() {
     <BrowserRouter>
       <ScrollToTop />
       <Routes>
-        {/* Redirect root to dashboard */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        
-        {/* Public routes */}
+
         <Route path="/login" element={<LoginPage />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
-        
-        {/* Protected routes wrapped in AppShell */}
+
         <Route
           element={
             <ProtectedRoute>
@@ -34,29 +31,32 @@ function App() {
             </ProtectedRoute>
           }
         >
-          {/* General User Routes */}
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/vault" element={<VaultPage />} />
-          <Route path="/requests" element={<ProtectedRoute><RequestsPage /></ProtectedRoute>} />
-          <Route path="/settings" element={<SettingsPage />} />
-          
-          {/* Admin Routes */}
+          <Route path="/requests" element={<RequestsPage />} />
+
           <Route path="/groups" element={
-            <ProtectedAdminRoute>
+            <ProtectedCapabilityRoute capability="manageGroups" message="Seu perfil nao permite gerenciar grupos.">
               <GroupsPage />
-            </ProtectedAdminRoute>
+            </ProtectedCapabilityRoute>
           } />
-          
+
           <Route path="/users" element={
-            <ProtectedAdminRoute>
+            <ProtectedCapabilityRoute capability="manageUsers" message="Seu perfil nao permite gerenciar usuarios e convites.">
               <UsersPage />
-            </ProtectedAdminRoute>
+            </ProtectedCapabilityRoute>
           } />
-          
+
           <Route path="/logs" element={
-            <ProtectedAdminRoute>
+            <ProtectedCapabilityRoute capability="viewLogs" message="Seu perfil nao permite visualizar logs.">
               <LogsPage />
-            </ProtectedAdminRoute>
+            </ProtectedCapabilityRoute>
+          } />
+
+          <Route path="/settings" element={
+            <ProtectedCapabilityRoute capability="manageSettings" message="Somente administradores acessam configuracoes globais.">
+              <SettingsPage />
+            </ProtectedCapabilityRoute>
           } />
         </Route>
       </Routes>
