@@ -36,7 +36,7 @@ export const useSecrets = () => {
 
       const { data: secretsData, error: secretsError } = await supabase
         .from('secrets')
-        .select('id, owner_id, title, login, link, notes, tags, expires_at, is_personal, created_at, updated_at, deleted_at, owner:profiles(email)')
+        .select('id, owner_id, title, login, link, notes, tags, expires_at, is_personal, password_strength, created_at, updated_at, deleted_at, owner:profiles(email)')
         .order('updated_at', { ascending: false });
 
       if (secretsError) throw secretsError;
@@ -64,9 +64,9 @@ export const useSecrets = () => {
 
           if (secret.owner_id === user.id) {
             myPermission = 'owner';
-          } else if (profileData?.is_admin || profileData?.role === 'admin') {
+          } else if ((profileData?.is_admin || profileData?.role === 'admin') && !secret.is_personal) {
             myPermission = 'admin';
-          } else {
+          } else if (!secret.is_personal) {
             const userPerms = permissionsData.filter(p =>
               p.secret_id === secret.id &&
               (p.granted_to_user_id === user.id || groupIds.includes(p.granted_to_group_id))
@@ -118,7 +118,7 @@ export const useSecrets = () => {
         console.warn('Could not fetch limited secret catalog:', catalogError.message);
       }
 
-      setSecrets([...visibleSecrets, ...catalogSecrets]);
+      setSecrets([...visibleSecrets, ...catalogSecrets].filter((secret) => secret.my_permission !== 'none'));
 
     } catch (err) {
       console.error('Error fetching secrets:', err);
