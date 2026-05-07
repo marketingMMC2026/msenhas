@@ -1,12 +1,5 @@
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-const json = (response, status = 200) => new Response(JSON.stringify(response), {
-  status,
-  headers: { 'Content-Type': 'application/json' },
-});
-
 const escapeHtml = (value = '') => String(value)
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
@@ -61,17 +54,25 @@ const buildHtml = ({ inviteUrl, fullName, roleLabel, groupNames }) => {
   `;
 };
 
-export default async function handler(request) {
+const readBody = (request) => {
+  if (!request.body) return {};
+  if (typeof request.body === 'string') {
+    return JSON.parse(request.body);
+  }
+  return request.body;
+};
+
+export default async function handler(request, response) {
   if (request.method !== 'POST') {
-    return json({ error: 'Method not allowed.' }, 405);
+    return response.status(405).json({ error: 'Method not allowed.' });
   }
 
   if (!process.env.RESEND_API_KEY) {
-    return json({ error: 'RESEND_API_KEY is not configured in Vercel.' }, 500);
+    return response.status(500).json({ error: 'RESEND_API_KEY is not configured in Vercel.' });
   }
 
   try {
-    const body = await request.json();
+    const body = readBody(request);
     const email = String(body.email || '').trim().toLowerCase();
     const inviteUrl = String(body.inviteUrl || '').trim();
     const fullName = String(body.fullName || '').trim();
@@ -79,13 +80,14 @@ export default async function handler(request) {
     const groupNames = Array.isArray(body.groupNames) ? body.groupNames : [];
 
     if (!email || !email.includes('@')) {
-      return json({ error: 'Invalid email address.' }, 400);
+      return response.status(400).json({ error: 'Invalid email address.' });
     }
 
     if (!inviteUrl || !inviteUrl.startsWith('https://')) {
-      return json({ error: 'Invalid invitation link.' }, 400);
+      return response.status(400).json({ error: 'Invalid invitation link.' });
     }
 
+    const resend = new Resend(process.env.RESEND_API_KEY);
     const from = process.env.INVITE_EMAIL_FROM || 'M Password <invites@mpassword.app>';
     const replyTo = process.env.INVITE_EMAIL_REPLY_TO || undefined;
 
@@ -98,11 +100,11 @@ export default async function handler(request) {
     });
 
     if (error) {
-      return json({ error: error.message || 'Failed to send email.' }, 400);
+      return response.status(400).json({ error: error.message || 'Failed to send email.' });
     }
 
-    return json({ id: data?.id });
+    return response.status(200).json({ id: data?.id });
   } catch (error) {
-    return json({ error: error.message || 'Failed to send invitation.' }, 500);
+    return response.status(500).json({ error: error.message || 'Failed to send invitation.' });
   }
 }
