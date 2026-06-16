@@ -32,7 +32,13 @@ const normalizeUrl = (value) => {
   return `https://${trimmed}`;
 };
 
-const splitCsvLine = (line) => {
+const detectCsvDelimiter = (headerLine) => {
+  const commaCount = (headerLine.match(/,/g) || []).length;
+  const semicolonCount = (headerLine.match(/;/g) || []).length;
+  return semicolonCount > commaCount ? ';' : ',';
+};
+
+const splitCsvLine = (line, delimiter = ',') => {
   const cells = [];
   let current = '';
   let insideQuotes = false;
@@ -45,7 +51,7 @@ const splitCsvLine = (line) => {
       i += 1;
     } else if (char === '"') {
       insideQuotes = !insideQuotes;
-    } else if ((char === ',' || char === ';') && !insideQuotes) {
+    } else if (char === delimiter && !insideQuotes) {
       cells.push(current.trim());
       current = '';
     } else {
@@ -57,6 +63,14 @@ const splitCsvLine = (line) => {
   return cells;
 };
 
+const normalizeCsvCells = (cells, headers, delimiter) => {
+  if (cells.length <= headers.length) return cells;
+
+  const normalizedCells = cells.slice(0, headers.length - 1);
+  normalizedCells.push(cells.slice(headers.length - 1).join(`${delimiter} `).trim());
+  return normalizedCells;
+};
+
 const buildRow = (row) => ({
   ...row,
   valid: Boolean(String(row.title || '').trim() && String(row.secretValue || '').trim()),
@@ -66,7 +80,8 @@ const parseCsv = (content) => {
   const lines = content.replace(/^\uFEFF/, '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (lines.length < 2) return { rows: [], errors: ['A planilha precisa ter cabecalho e pelo menos uma linha.'] };
 
-  const headers = splitCsvLine(lines[0]).map(normalize);
+  const delimiter = detectCsvDelimiter(lines[0]);
+  const headers = splitCsvLine(lines[0], delimiter).map(normalize);
   const findIndex = (field) => headers.findIndex((header) => columnAliases[field].includes(header));
   const indexes = {
     title: findIndex('title'),
@@ -83,7 +98,7 @@ const parseCsv = (content) => {
   if (indexes.secretValue === -1) errors.push('Nao encontrei uma coluna de senha.');
 
   const rows = lines.slice(1).map((line, index) => {
-    const cells = splitCsvLine(line);
+    const cells = normalizeCsvCells(splitCsvLine(line, delimiter), headers, delimiter);
     return buildRow({
       rowNumber: index + 2,
       title: indexes.title >= 0 ? cells[indexes.title]?.trim() || '' : '',
