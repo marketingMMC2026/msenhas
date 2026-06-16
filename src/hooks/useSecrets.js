@@ -10,6 +10,23 @@ const chunkArray = (items, size) => {
   return chunks;
 };
 
+const fetchAllRows = async (queryBuilder, pageSize = 1000) => {
+  let allRows = [];
+  let from = 0;
+
+  while (true) {
+    const to = from + pageSize - 1;
+    const { data = [], error } = await queryBuilder().range(from, to);
+    if (error) throw error;
+
+    allRows = [...allRows, ...data];
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return allRows;
+};
+
 export const useSecrets = () => {
   const { user } = useAuth();
   const [secrets, setSecrets] = useState([]);
@@ -42,39 +59,43 @@ export const useSecrets = () => {
 
       const groupIds = (groupMembers || []).map(g => g.group_id);
 
-      const { data: secretsData, error: secretsError } = await supabase
+      const groupsData = await fetchAllRows(() => supabase
+        .from('groups')
+        .select('id, name')
+        .order('name'));
+
+      const groupNameById = new Map(groupsData.map((group) => [group.id, group.name]));
+
+      const secretsData = await fetchAllRows(() => supabase
         .from('secrets')
         .select('id, owner_id, title, login, link, notes, tags, expires_at, is_personal, password_strength, created_at, updated_at, deleted_at, owner:profiles(email)')
-        .order('updated_at', { ascending: false });
-
-      if (secretsError) throw secretsError;
+        .order('updated_at', { ascending: false }));
 
       let visibleSecrets = [];
       if (secretsData && secretsData.length > 0) {
         let permissionsData = [];
         const isAdmin = profileData?.is_admin || profileData?.role === 'admin';
+        const secretIdChunks = chunkArray(secretsData.map(s => s.id), 100);
 
-        if (!isAdmin) {
-          const secretIdChunks = chunkArray(secretsData.map(s => s.id), 100);
+        for (const secretIds of secretIdChunks) {
+          let permissionsQuery = supabase
+            .from('secret_permissions')
+            .select('*')
+            .in('secret_id', secretIds)
+            .is('revoked_at', null);
 
-          for (const secretIds of secretIdChunks) {
-            let permissionsQuery = supabase
-              .from('secret_permissions')
-              .select('*')
-              .in('secret_id', secretIds)
-              .is('revoked_at', null);
-
+          if (!isAdmin) {
             if (groupIds.length > 0) {
               permissionsQuery = permissionsQuery.or(`granted_to_user_id.eq.${user.id},granted_to_group_id.in.(${groupIds.join(',')})`);
             } else {
               permissionsQuery = permissionsQuery.eq('granted_to_user_id', user.id);
             }
-
-            const { data: chunkPermissions = [], error: permissionsError } = await permissionsQuery;
-            if (permissionsError) throw permissionsError;
-
-            permissionsData = [...permissionsData, ...chunkPermissions];
           }
+
+          const { data: chunkPermissions = [], error: permissionsError } = await permissionsQuery;
+          if (permissionsError) throw permissionsError;
+
+          permissionsData = [...permissionsData, ...chunkPermissions];
         }
 
         const permissionsBySecret = new Map();
@@ -87,6 +108,12 @@ export const useSecrets = () => {
         visibleSecrets = secretsData.map(secret => {
           let myPermission = 'none';
           let accessType = secret.is_personal ? 'personal' : 'shared';
+          const secretPermissions = permissionsBySecret.get(secret.id) || [];
+          const groupNames = Array.from(new Set(
+            secretPermissions
+              .map((permission) => groupNameById.get(permission.granted_to_group_id))
+              .filter(Boolean)
+          )).sort();
 
           if (secret.owner_id === user.id) {
             myPermission = 'owner';
@@ -115,6 +142,7 @@ export const useSecrets = () => {
             is_catalog_only: false,
             access_type: accessType,
             my_permission: myPermission,
+            group_names: groupNames,
             owner_email: secret.owner?.email || 'Desconhecido'
           };
         });
@@ -137,6 +165,7 @@ export const useSecrets = () => {
             is_catalog_only: true,
             access_type: 'catalog',
             my_permission: 'catalog',
+            group_names: [],
             owner_email: secret.owner_email || 'Desconhecido'
           }));
       } else if (catalogError && catalogError.code !== '42883') {

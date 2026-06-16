@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Search, ExternalLink, Edit2, Archive, RotateCcw, Share2, Eye, MoreHorizontal, Lock, Users, ShieldQuestion } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import LoadingSpinner from '@/components/LoadingSpinner';
@@ -18,7 +18,11 @@ const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onV
   const { t } = useLanguage();
   const { can } = useAuth();
   const [search, setSearch] = useState('');
-  const [selectedTags, setSelectedTags] = useState([]);
+  const [scope, setScope] = useState('mine');
+  const [selectedGroup, setSelectedGroup] = useState('');
+  const [selectedTag, setSelectedTag] = useState('');
+  const [pageSize, setPageSize] = useState(30);
+  const [visibleLimit, setVisibleLimit] = useState(30);
 
   const allTags = useMemo(() => {
     const tags = new Set();
@@ -26,18 +30,34 @@ const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onV
     return Array.from(tags).sort();
   }, [secrets]);
 
-  const activeCount = secrets.filter(secret => !secret.is_archived).length;
-  const archivedCount = secrets.filter(secret => secret.is_archived).length;
+  const allGroups = useMemo(() => {
+    const groups = new Set();
+    secrets.forEach(s => s.group_names?.forEach(group => groups.add(group)));
+    return Array.from(groups).sort();
+  }, [secrets]);
 
-  const filteredSecrets = useMemo(() => secrets.filter(secret => {
+  const mySecrets = useMemo(() => secrets.filter(secret => secret.is_personal), [secrets]);
+  const scopedSecrets = useMemo(() => scope === 'mine' ? mySecrets : secrets, [mySecrets, scope, secrets]);
+
+  const activeCount = scopedSecrets.filter(secret => !secret.is_archived).length;
+  const archivedCount = scopedSecrets.filter(secret => secret.is_archived).length;
+
+  useEffect(() => {
+    setVisibleLimit(pageSize);
+  }, [pageSize, scope, search, selectedGroup, selectedTag, showArchived]);
+
+  const filteredSecrets = useMemo(() => scopedSecrets.filter(secret => {
     if (Boolean(secret.is_archived) !== showArchived) return false;
     const searchLower = search.toLowerCase();
-    const matchesSearch = secret.title.toLowerCase().includes(searchLower) || (secret.login && secret.login.toLowerCase().includes(searchLower)) || (secret.link && secret.link.toLowerCase().includes(searchLower));
-    const matchesTags = selectedTags.length === 0 || (secret.tags && selectedTags.every(tag => secret.tags.includes(tag)));
-    return matchesSearch && matchesTags;
-  }), [secrets, search, selectedTags, showArchived]);
+    const matchesSearch = !searchLower || secret.title.toLowerCase().includes(searchLower) || (secret.login && secret.login.toLowerCase().includes(searchLower)) || (secret.link && secret.link.toLowerCase().includes(searchLower));
+    const matchesGroup = !selectedGroup || secret.group_names?.includes(selectedGroup);
+    const matchesTag = !selectedTag || secret.tags?.includes(selectedTag);
+    return matchesSearch && matchesGroup && matchesTag;
+  }), [scopedSecrets, search, selectedGroup, selectedTag, showArchived]);
 
-  const toggleTag = (tag) => setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+  const visibleSecrets = useMemo(() => filteredSecrets.slice(0, visibleLimit), [filteredSecrets, visibleLimit]);
+  const canLoadMore = visibleLimit < filteredSecrets.length;
+
   const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
 
   const canEditSecret = (secret) => can('editSecrets') && !secret.is_catalog_only && !secret.is_archived && ['owner', 'admin', 'edit', 'manage_access'].includes(secret.my_permission);
@@ -49,21 +69,40 @@ const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onV
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="inline-flex w-fit rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
-          <button type="button" onClick={() => onShowArchivedChange(false)} className={`rounded-md px-3 py-1.5 text-sm font-medium ${!showArchived ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>{t('activePasswords')} ({activeCount})</button>
-          <button type="button" onClick={() => onShowArchivedChange(true)} className={`rounded-md px-3 py-1.5 text-sm font-medium ${showArchived ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>{t('archivedPasswords')} ({archivedCount})</button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex w-fit rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
+            <button type="button" onClick={() => setScope('mine')} className={`rounded-md px-3 py-1.5 text-sm font-medium ${scope === 'mine' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>Meus acessos ({mySecrets.length})</button>
+            <button type="button" onClick={() => setScope('all')} className={`rounded-md px-3 py-1.5 text-sm font-medium ${scope === 'all' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>Todos os acessos ({secrets.length})</button>
+          </div>
+          <div className="inline-flex w-fit rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
+            <button type="button" onClick={() => onShowArchivedChange(false)} className={`rounded-md px-3 py-1.5 text-sm font-medium ${!showArchived ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>{t('activePasswords')} ({activeCount})</button>
+            <button type="button" onClick={() => onShowArchivedChange(true)} className={`rounded-md px-3 py-1.5 text-sm font-medium ${showArchived ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>{t('archivedPasswords')} ({archivedCount})</button>
+          </div>
         </div>
-        <div className="relative w-full sm:w-80"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" /><input type="text" placeholder="Buscar acessos..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+        <div className="grid w-full gap-2 sm:grid-cols-3 lg:w-auto">
+          <div className="relative min-w-0 sm:w-72"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" /><input type="text" placeholder="Buscar acessos..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+          <select value={selectedGroup} onChange={(e) => setSelectedGroup(e.target.value)} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="">Todos os grupos</option>
+            {allGroups.map(group => <option key={group} value={group}>{group}</option>)}
+          </select>
+          <select value={selectedTag} onChange={(e) => setSelectedTag(e.target.value)} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="">Todas as tags</option>
+            {allTags.map(tag => <option key={tag} value={tag}>{tag}</option>)}
+          </select>
+        </div>
       </div>
 
-      {allTags.length > 0 && <div className="flex flex-wrap gap-2">{allTags.map(tag => <button key={tag} onClick={() => toggleTag(tag)} className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${selectedTags.includes(tag) ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-gray-100 text-gray-600 border border-transparent hover:bg-gray-200'}`}>{tag}</button>)}</div>}
+      <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-gray-500">
+        <span>Mostrando {Math.min(visibleSecrets.length, filteredSecrets.length)} de {filteredSecrets.length} acessos filtrados.</span>
+        {(selectedGroup || selectedTag || search) && <button type="button" onClick={() => { setSearch(''); setSelectedGroup(''); setSelectedTag(''); }} className="font-medium text-blue-600 hover:text-blue-800">Limpar filtros</button>}
+      </div>
 
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead className="bg-gray-50 text-gray-700 font-medium"><tr><th className="px-4 py-3">Acesso</th><th className="px-4 py-3">Login</th><th className="px-4 py-3">Link</th><th className="px-4 py-3">Tags</th><th className="px-4 py-3">Forca</th><th className="px-4 py-3">Permissao</th><th className="px-4 py-3">Atualizado</th><th className="px-4 py-3 text-right">Acoes</th></tr></thead>
             <tbody className="divide-y divide-gray-100">
-              {filteredSecrets.length === 0 ? <tr><td colSpan="8" className="px-4 py-8 text-center text-gray-500">{showArchived ? 'Nenhum acesso arquivado.' : 'Nenhum acesso encontrado com os filtros atuais.'}</td></tr> : filteredSecrets.map(secret => (
+              {filteredSecrets.length === 0 ? <tr><td colSpan="8" className="px-4 py-8 text-center text-gray-500">{showArchived ? 'Nenhum acesso arquivado.' : 'Nenhum acesso encontrado com os filtros atuais.'}</td></tr> : visibleSecrets.map(secret => (
                 <tr key={secret.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3 font-medium text-gray-900"><div className="flex items-center gap-3"><AccessIcon secret={secret} /><div>{secret.is_catalog_only ? <span>{secret.title}</span> : <button onClick={() => onView(secret)} className="hover:underline hover:text-blue-600 text-left">{secret.title}</button>}{secret.is_archived && <span className="ml-2 inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">{t('archived')}</span>}</div></div></td>
                   <td className="px-4 py-3 text-gray-600 font-mono text-xs">{secret.login || '-'}</td>
@@ -79,6 +118,20 @@ const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onV
           </table>
         </div>
       </div>
+      {filteredSecrets.length > 0 && <div className="flex flex-col items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 sm:flex-row">
+        <span className="text-sm text-gray-500">Exibindo {visibleSecrets.length} de {filteredSecrets.length} acessos.</span>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            Por vez
+            <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} className="rounded-md border border-gray-200 bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value={30}>30</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </label>
+          {canLoadMore && <Button variant="outline" onClick={() => setVisibleLimit((current) => current + pageSize)}>Carregar mais</Button>}
+        </div>
+      </div>}
     </div>
   );
 };
