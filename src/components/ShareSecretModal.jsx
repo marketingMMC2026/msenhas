@@ -39,6 +39,10 @@ const ShareSecretModal = ({ isOpen, onClose, secret }) => {
 
   const fetchPermissions = async () => {
     if (!secret) return;
+    if (secret.is_personal) {
+      setPermissions([]);
+      return;
+    }
     setLoading(true);
     try {
       const { data: perms, error } = await supabase
@@ -86,6 +90,10 @@ const ShareSecretModal = ({ isOpen, onClose, secret }) => {
 
   const fetchAvailableTargets = async () => {
     if (!secret) return;
+    if (secret.is_personal) {
+      setAvailableTargets([]);
+      return;
+    }
     setLoading(true);
     try {
       if (targetType === 'user') {
@@ -130,6 +138,14 @@ const ShareSecretModal = ({ isOpen, onClose, secret }) => {
 
   const handleGrant = async () => {
     if (!selectedTargetId) return;
+    if (secret?.is_personal) {
+      toast({
+        title: 'Acesso particular',
+        description: 'Acessos particulares nao podem ser compartilhados. Para compartilhar, edite e desmarque Particular.',
+        variant: 'destructive'
+      });
+      return;
+    }
     setLoading(true);
     try {
       const payload = {
@@ -195,10 +211,10 @@ const ShareSecretModal = ({ isOpen, onClose, secret }) => {
         </DialogHeader>
 
         {secret?.is_personal ? (
-          <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 p-4 rounded text-sm mb-4">
-            <p><strong>Aviso:</strong> esta senha está marcada como pessoal. Ao compartilhar, outras pessoas poderão acessá-la.</p>
+          <div className="rounded border border-purple-200 bg-purple-50 p-4 text-sm text-purple-800">
+            <p><strong>Acesso particular.</strong> Este acesso so pode ser visto pelo proprio dono e nao pode ser compartilhado. Para liberar para equipe, edite o acesso e desmarque Particular.</p>
           </div>
-        ) : null}
+        ) : (
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
@@ -286,6 +302,7 @@ const ShareSecretModal = ({ isOpen, onClose, secret }) => {
             </Button>
           </TabsContent>
         </Tabs>
+        )}
       </DialogContent>
     </Dialog>
   );

@@ -81,11 +81,13 @@ export const useSecrets = () => {
         .select('id, owner_id, title, login, link, notes, tags, expires_at, is_personal, password_strength, created_at, updated_at, deleted_at, owner:profiles(email)')
         .order('updated_at', { ascending: false }));
 
+      const readableSecretsData = (secretsData || []).filter((secret) => !secret.is_personal || secret.owner_id === user.id);
+
       let visibleSecrets = [];
-      if (secretsData && secretsData.length > 0) {
+      if (readableSecretsData.length > 0) {
         let permissionsData = [];
         const isAdmin = profileData?.is_admin || profileData?.role === 'admin';
-        const secretIdChunks = chunkArray(secretsData.map(s => s.id), 100);
+        const secretIdChunks = chunkArray(readableSecretsData.map(s => s.id), 100);
 
         if (!isAdmin) {
           for (const secretIds of secretIdChunks) {
@@ -110,7 +112,7 @@ export const useSecrets = () => {
 
         const permissionsBySecret = buildPermissionsBySecret(permissionsData);
 
-        visibleSecrets = secretsData.map(secret => {
+        visibleSecrets = readableSecretsData.map(secret => {
           let myPermission = 'none';
           let accessType = secret.is_personal ? 'personal' : 'shared';
           const secretPermissions = permissionsBySecret.get(secret.id) || [];

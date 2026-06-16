@@ -22,7 +22,7 @@ const fieldHelp = {
   twofa: 'Guarde codigos de recuperacao 2FA ou instrucoes de autenticacao. Restrinja esse campo a acessos realmente confiaveis.',
   groups: 'Selecione os grupos que devem acessar esta senha. Exemplo: Marketing, Criacao e Design ou Financeiro.',
   permission: 'Define o que os grupos marcados podem fazer. Visualizar abre a senha; Editar permite alterar; Gerenciar acessos permite compartilhar tambem.',
-  personal: 'Quando marcado, o segredo fica pessoal: visivel para voce e administradores. Ao selecionar grupos, ele vira compartilhado automaticamente.'
+  personal: 'Quando marcado, o acesso fica particular: visivel somente para voce. Nem administradores podem visualizar. Ao selecionar grupos, ele vira compartilhado automaticamente.'
 };
 
 const permissionLabels = {
@@ -418,11 +418,11 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
                         className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
                       />
                        <div className="space-y-1">
-                        <FieldLabel htmlFor="personal" help={fieldHelp.personal}>Este e um segredo pessoal</FieldLabel>
+                        <FieldLabel htmlFor="personal" help={fieldHelp.personal}>Este e um acesso particular</FieldLabel>
                         <p className="text-xs text-gray-500">
                           {selectedGroupIds.length > 0
                             ? 'Desativado porque ha grupos selecionados. Esta senha sera compartilhada.'
-                            : 'Visivel apenas para voce e administradores.'}
+                            : 'Visivel somente para voce. Nem administradores podem visualizar.'}
                         </p>
                        </div>
                   </div>

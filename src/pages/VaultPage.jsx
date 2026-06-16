@@ -19,7 +19,7 @@ import ImportSecretsModal from '@/components/ImportSecretsModal';
 
 const VaultPage = () => {
   const { secrets, loading, error, refresh } = useSecrets();
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const { toast } = useToast();
   const { logAction } = useAuditLog();
   const { t } = useLanguage();
@@ -39,6 +39,9 @@ const VaultPage = () => {
   const fetchSecretDetails = async (secret) => {
     const { data, error } = await supabase.from('secrets').select('*, owner:profiles(email)').eq('id', secret.id).single();
     if (error) throw error;
+    if (data.is_personal && data.owner_id !== user?.id) {
+      throw new Error('Este acesso particular so pode ser visualizado pelo proprio dono.');
+    }
     return { ...secret, ...data, is_archived: Boolean(data.deleted_at), my_permission: secret.my_permission, access_type: secret.access_type, owner_email: data.owner?.email || secret.owner_email };
   };
 

@@ -134,7 +134,7 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onArchive, 
   if (!secret) return null;
 
   const canEdit = !secret.is_archived && ['owner', 'admin', 'edit', 'manage_access'].includes(secret.my_permission);
-  const canShare = !secret.is_archived && ['owner', 'admin', 'manage_access'].includes(secret.my_permission);
+  const canShare = !secret.is_archived && !secret.is_personal && ['owner', 'admin', 'manage_access'].includes(secret.my_permission);
   const canManage = ['owner', 'admin', 'manage_access'].includes(secret.my_permission);
   const visibleSecret = decryptError ? '' : (decryptedSecret || secret.secret_value || '');
   const visibleTwofa = decryptError ? '' : (decryptedTwofa || secret.twofa_recovery || '');
@@ -145,7 +145,7 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onArchive, 
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {secret.title}
-            {secret.is_personal && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-normal">Pessoal</span>}
+            {secret.is_personal && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-normal">Particular</span>}
             {secret.is_archived && <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-normal">{t('archived')}</span>}
           </DialogTitle>
         </DialogHeader>
