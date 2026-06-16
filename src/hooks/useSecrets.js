@@ -2,6 +2,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth.jsx';
 
+const chunkArray = (items, size) => {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+};
+
 export const useSecrets = () => {
   const { user } = useAuth();
   const [secrets, setSecrets] = useState([]);
@@ -43,20 +51,38 @@ export const useSecrets = () => {
 
       let visibleSecrets = [];
       if (secretsData && secretsData.length > 0) {
-        let permissionsQuery = supabase
-          .from('secret_permissions')
-          .select('*')
-          .in('secret_id', secretsData.map(s => s.id))
-          .is('revoked_at', null);
+        let permissionsData = [];
+        const isAdmin = profileData?.is_admin || profileData?.role === 'admin';
 
-        if (groupIds.length > 0) {
-          permissionsQuery = permissionsQuery.or(`granted_to_user_id.eq.${user.id},granted_to_group_id.in.(${groupIds.join(',')})`);
-        } else {
-          permissionsQuery = permissionsQuery.eq('granted_to_user_id', user.id);
+        if (!isAdmin) {
+          const secretIdChunks = chunkArray(secretsData.map(s => s.id), 100);
+
+          for (const secretIds of secretIdChunks) {
+            let permissionsQuery = supabase
+              .from('secret_permissions')
+              .select('*')
+              .in('secret_id', secretIds)
+              .is('revoked_at', null);
+
+            if (groupIds.length > 0) {
+              permissionsQuery = permissionsQuery.or(`granted_to_user_id.eq.${user.id},granted_to_group_id.in.(${groupIds.join(',')})`);
+            } else {
+              permissionsQuery = permissionsQuery.eq('granted_to_user_id', user.id);
+            }
+
+            const { data: chunkPermissions = [], error: permissionsError } = await permissionsQuery;
+            if (permissionsError) throw permissionsError;
+
+            permissionsData = [...permissionsData, ...chunkPermissions];
+          }
         }
 
-        const { data: permissionsData = [], error: permissionsError } = await permissionsQuery;
-        if (permissionsError) throw permissionsError;
+        const permissionsBySecret = new Map();
+        permissionsData.forEach((permission) => {
+          const current = permissionsBySecret.get(permission.secret_id) || [];
+          current.push(permission);
+          permissionsBySecret.set(permission.secret_id, current);
+        });
 
         visibleSecrets = secretsData.map(secret => {
           let myPermission = 'none';
@@ -67,8 +93,7 @@ export const useSecrets = () => {
           } else if ((profileData?.is_admin || profileData?.role === 'admin') && !secret.is_personal) {
             myPermission = 'admin';
           } else if (!secret.is_personal) {
-            const userPerms = permissionsData.filter(p =>
-              p.secret_id === secret.id &&
+            const userPerms = (permissionsBySecret.get(secret.id) || []).filter(p =>
               (p.granted_to_user_id === user.id || groupIds.includes(p.granted_to_group_id))
             );
 
