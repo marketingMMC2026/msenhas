@@ -32,6 +32,12 @@ const permissionLabels = {
   manage_access: 'Gerenciar acessos'
 };
 
+const groupMemberRoleLabels = {
+  manager: 'Gestor',
+  admin: 'Gestor',
+  member: 'Membro'
+};
+
 const FieldLabel = ({ htmlFor, children, help }) => (
   <div className="flex items-center gap-1.5">
     <Label htmlFor={htmlFor}>{children}</Label>
@@ -82,12 +88,36 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
     const fetchGroups = async () => {
       if (!isOpen || !user?.id) return;
       setLoadingGroups(true);
-      const { data, error } = await supabase.from('groups').select('id, name').order('name');
+      const [groupsResult, membersResult] = await Promise.all([
+        supabase.from('groups').select('id, name').order('name'),
+        supabase
+          .from('group_members')
+          .select('group_id, role, profiles:user_id(email, full_name)')
+          .order('added_at', { ascending: true })
+      ]);
+
       if (!cancelled) {
-        if (error) {
-          toast({ variant: 'destructive', title: 'Erro ao carregar grupos', description: error.message });
+        if (groupsResult.error) {
+          toast({ variant: 'destructive', title: 'Erro ao carregar grupos', description: groupsResult.error.message });
         } else {
-          setAvailableGroups(data || []);
+          const membersByGroupId = new Map();
+          if (!membersResult.error) {
+            (membersResult.data || []).forEach((member) => {
+              const currentMembers = membersByGroupId.get(member.group_id) || [];
+              currentMembers.push({
+                name: member.profiles?.full_name || member.profiles?.email || 'Usuario sem nome',
+                email: member.profiles?.email || '',
+                role: groupMemberRoleLabels[member.role] || 'Membro'
+              });
+              membersByGroupId.set(member.group_id, currentMembers);
+            });
+          }
+
+          setAvailableGroups((groupsResult.data || []).map((group) => ({
+            ...group,
+            members: membersByGroupId.get(group.id) || [],
+            membersLoaded: !membersResult.error
+          })));
         }
         setLoadingGroups(false);
       }
@@ -428,7 +458,34 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
                               className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                             />
                             <Users className="h-4 w-4 text-gray-400" />
-                            <span>{group.name}</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="cursor-help underline decoration-dotted decoration-gray-300 underline-offset-4">{group.name}</span>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-sm">
+                                <div className="space-y-2">
+                                  <p className="font-medium text-gray-900">{group.name}</p>
+                                  {!group.membersLoaded ? (
+                                    <p className="text-xs text-gray-600">Nao foi possivel carregar os membros deste grupo agora.</p>
+                                  ) : group.members.length === 0 ? (
+                                    <p className="text-xs text-gray-600">Nenhum usuario neste grupo.</p>
+                                  ) : (
+                                    <div className="space-y-1">
+                                      {group.members.slice(0, 8).map((member) => (
+                                        <div key={`${group.id}-${member.email || member.name}`} className="text-xs leading-relaxed">
+                                          <span className="font-medium text-gray-800">{member.name}</span>
+                                          {member.email && member.email !== member.name && <span className="text-gray-500"> - {member.email}</span>}
+                                          <span className="text-gray-400"> ({member.role})</span>
+                                        </div>
+                                      ))}
+                                      {group.members.length > 8 && (
+                                        <p className="text-xs text-gray-500">+{group.members.length - 8} usuario(s)</p>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
                           </label>
                         ))
                       )}
