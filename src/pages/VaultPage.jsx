@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet';
 import { Plus, RefreshCw, AlertCircle, Upload, Archive } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,70 @@ const VaultPage = () => {
   const { t } = useLanguage();
   const [showArchived, setShowArchived] = useState(false);
   const [modalState, setModalState] = useState({ type: null, data: null });
+  const [auditUsers, setAuditUsers] = useState([]);
+  const [auditUserId, setAuditUserId] = useState('');
+  const [auditSecrets, setAuditSecrets] = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState(null);
+  const isAuditMode = Boolean(auditUserId);
+  const selectedAuditUser = useMemo(() => auditUsers.find((auditUser) => auditUser.id === auditUserId) || null, [auditUserId, auditUsers]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!can('manageUsers')) return;
+
+    const fetchAuditUsers = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, is_active')
+        .eq('is_active', true)
+        .order('full_name', { ascending: true });
+
+      if (!cancelled) {
+        if (error) {
+          console.warn('Could not load audit users:', error.message);
+        } else {
+          setAuditUsers(data || []);
+        }
+      }
+    };
+
+    fetchAuditUsers();
+    return () => { cancelled = true; };
+  }, [can]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!auditUserId) {
+      setAuditSecrets([]);
+      setAuditError(null);
+      return;
+    }
+
+    const fetchAuditedAccesses = async () => {
+      setAuditLoading(true);
+      setAuditError(null);
+      const { data, error } = await supabase.rpc('admin_list_user_accesses', { p_user_id: auditUserId });
+
+      if (cancelled) return;
+      if (error) {
+        setAuditSecrets([]);
+        setAuditError(error.message);
+      } else {
+        setAuditSecrets((data || []).map((secret) => ({
+          ...secret,
+          is_archived: Boolean(secret.deleted_at),
+          is_catalog_only: false,
+          my_permission: 'audit',
+          owner_email: secret.owner_email || 'Desconhecido'
+        })));
+      }
+      setAuditLoading(false);
+    };
+
+    fetchAuditedAccesses();
+    return () => { cancelled = true; };
+  }, [auditUserId]);
 
   const closeModal = () => setModalState({ type: null, data: null });
   const handleCreate = () => {
@@ -121,8 +185,31 @@ const VaultPage = () => {
           </div>
         </div>
 
-        {error && <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg flex items-center justify-between"><div className="flex items-center gap-2"><AlertCircle className="h-5 w-5" /><span>{t('loadPasswordsError')}: {error}</span></div><Button variant="ghost" size="sm" onClick={refresh} className="text-red-700 hover:bg-red-100">{t('retry')}</Button></div>}
-        <SecretTable secrets={secrets} loading={loading} showArchived={showArchived} onShowArchivedChange={setShowArchived} onView={handleView} onEdit={handleEdit} onShare={handleShare} onArchive={handleArchiveClick} onRestore={handleRestore} />
+        {can('manageUsers') && (
+          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+            <label htmlFor="audit-user" className="block text-sm font-medium text-gray-700">Auditar acessos de usuario</label>
+            <div className="mt-2 grid gap-3 md:grid-cols-[minmax(260px,420px)_1fr]">
+              <select
+                id="audit-user"
+                value={auditUserId}
+                onChange={(event) => setAuditUserId(event.target.value)}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Ver meus acessos normalmente</option>
+                {auditUsers.map((auditUser) => (
+                  <option key={auditUser.id} value={auditUser.id}>
+                    {auditUser.full_name || auditUser.email} - {auditUser.email}
+                  </option>
+                ))}
+              </select>
+              <p className="text-sm text-gray-500">
+                Ao selecionar uma pessoa, voce ve quais acessos ela possui, mas nao abre senha, 2FA ou detalhes sensiveis.
+              </p>
+            </div>
+          </div>
+        )}
+        {(isAuditMode ? auditError : error) && <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg flex items-center justify-between"><div className="flex items-center gap-2"><AlertCircle className="h-5 w-5" /><span>{t('loadPasswordsError')}: {isAuditMode ? auditError : error}</span></div><Button variant="ghost" size="sm" onClick={isAuditMode ? () => setAuditUserId('') : refresh} className="text-red-700 hover:bg-red-100">{isAuditMode ? 'Voltar' : t('retry')}</Button></div>}
+        <SecretTable secrets={isAuditMode ? auditSecrets : secrets} loading={isAuditMode ? auditLoading : loading} showArchived={showArchived} onShowArchivedChange={setShowArchived} onView={handleView} onEdit={handleEdit} onShare={handleShare} onArchive={handleArchiveClick} onRestore={handleRestore} auditMode={isAuditMode} auditUser={selectedAuditUser} />
         <SecretModal isOpen={modalState.type === 'create' || modalState.type === 'edit'} onClose={closeModal} secret={modalState.data} onSuccess={handleSuccess} />
         <SecretViewModal isOpen={modalState.type === 'view'} onClose={closeModal} secret={modalState.data} onEdit={() => handleEdit(modalState.data)} onShare={() => handleShare(modalState.data)} onArchive={() => handleArchiveClick(modalState.data)} onRestore={() => handleRestore(modalState.data)} />
         <ShareSecretModal isOpen={modalState.type === 'share'} onClose={closeModal} secret={modalState.data} />
