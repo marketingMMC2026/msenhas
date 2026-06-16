@@ -24,23 +24,20 @@ const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onV
   const [pageSize, setPageSize] = useState(30);
   const [visibleLimit, setVisibleLimit] = useState(30);
 
-  const allTags = useMemo(() => {
-    const tags = new Set();
-    secrets.forEach(s => s.tags?.forEach(tag => tags.add(tag)));
-    return Array.from(tags).sort();
-  }, [secrets]);
-
-  const allGroups = useMemo(() => {
-    const groups = new Set();
-    secrets.forEach(s => s.group_names?.forEach(group => groups.add(group)));
-    return Array.from(groups).sort();
-  }, [secrets]);
-
   const mySecrets = useMemo(() => secrets.filter(secret => secret.is_personal), [secrets]);
   const scopedSecrets = useMemo(() => scope === 'mine' ? mySecrets : secrets, [mySecrets, scope, secrets]);
 
-  const activeCount = scopedSecrets.filter(secret => !secret.is_archived).length;
-  const archivedCount = scopedSecrets.filter(secret => secret.is_archived).length;
+  const allTags = useMemo(() => {
+    const tags = new Set();
+    scopedSecrets.forEach(s => s.tags?.forEach(tag => tags.add(tag)));
+    return Array.from(tags).sort();
+  }, [scopedSecrets]);
+
+  const allGroups = useMemo(() => {
+    const groups = new Set();
+    scopedSecrets.forEach(s => s.group_names?.forEach(group => groups.add(group)));
+    return Array.from(groups).sort();
+  }, [scopedSecrets]);
 
   useEffect(() => {
     setVisibleLimit(pageSize);
@@ -68,24 +65,21 @@ const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onV
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="inline-flex w-fit rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
             <button type="button" onClick={() => setScope('mine')} className={`rounded-md px-3 py-1.5 text-sm font-medium ${scope === 'mine' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>Meus acessos ({mySecrets.length})</button>
             <button type="button" onClick={() => setScope('all')} className={`rounded-md px-3 py-1.5 text-sm font-medium ${scope === 'all' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>Todos os acessos ({secrets.length})</button>
           </div>
-          <div className="inline-flex w-fit rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
-            <button type="button" onClick={() => onShowArchivedChange(false)} className={`rounded-md px-3 py-1.5 text-sm font-medium ${!showArchived ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>{t('activePasswords')} ({activeCount})</button>
-            <button type="button" onClick={() => onShowArchivedChange(true)} className={`rounded-md px-3 py-1.5 text-sm font-medium ${showArchived ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>{t('archivedPasswords')} ({archivedCount})</button>
-          </div>
+          {showArchived && <button type="button" onClick={() => onShowArchivedChange(false)} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100">Voltar para ativos</button>}
         </div>
-        <div className="grid w-full gap-2 sm:grid-cols-3 lg:w-auto">
-          <div className="relative min-w-0 sm:w-72"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" /><input type="text" placeholder="Buscar acessos..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
-          <select value={selectedGroup} onChange={(e) => setSelectedGroup(e.target.value)} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <div className="grid w-full gap-3 md:grid-cols-[minmax(260px,1fr)_minmax(220px,280px)_minmax(180px,240px)]">
+          <div className="relative min-w-0"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" /><input type="text" placeholder="Buscar acessos..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+          <select value={selectedGroup} onChange={(e) => setSelectedGroup(e.target.value)} className="min-w-0 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
             <option value="">Todos os grupos</option>
             {allGroups.map(group => <option key={group} value={group}>{group}</option>)}
           </select>
-          <select value={selectedTag} onChange={(e) => setSelectedTag(e.target.value)} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <select value={selectedTag} onChange={(e) => setSelectedTag(e.target.value)} className="min-w-0 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
             <option value="">Todas as tags</option>
             {allTags.map(tag => <option key={tag} value={tag}>{tag}</option>)}
           </select>

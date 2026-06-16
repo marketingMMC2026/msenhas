@@ -27,6 +27,16 @@ const fetchAllRows = async (queryBuilder, pageSize = 1000) => {
   return allRows;
 };
 
+const buildPermissionsBySecret = (permissionsData) => {
+  const permissionsBySecret = new Map();
+  permissionsData.forEach((permission) => {
+    const current = permissionsBySecret.get(permission.secret_id) || [];
+    current.push(permission);
+    permissionsBySecret.set(permission.secret_id, current);
+  });
+  return permissionsBySecret;
+};
+
 export const useSecrets = () => {
   const { user } = useAuth();
   const [secrets, setSecrets] = useState([]);
@@ -77,33 +87,28 @@ export const useSecrets = () => {
         const isAdmin = profileData?.is_admin || profileData?.role === 'admin';
         const secretIdChunks = chunkArray(secretsData.map(s => s.id), 100);
 
-        for (const secretIds of secretIdChunks) {
-          let permissionsQuery = supabase
-            .from('secret_permissions')
-            .select('*')
-            .in('secret_id', secretIds)
-            .is('revoked_at', null);
+        if (!isAdmin) {
+          for (const secretIds of secretIdChunks) {
+            let permissionsQuery = supabase
+              .from('secret_permissions')
+              .select('*')
+              .in('secret_id', secretIds)
+              .is('revoked_at', null);
 
-          if (!isAdmin) {
             if (groupIds.length > 0) {
               permissionsQuery = permissionsQuery.or(`granted_to_user_id.eq.${user.id},granted_to_group_id.in.(${groupIds.join(',')})`);
             } else {
               permissionsQuery = permissionsQuery.eq('granted_to_user_id', user.id);
             }
+
+            const { data: chunkPermissions = [], error: permissionsError } = await permissionsQuery;
+            if (permissionsError) throw permissionsError;
+
+            permissionsData = [...permissionsData, ...chunkPermissions];
           }
-
-          const { data: chunkPermissions = [], error: permissionsError } = await permissionsQuery;
-          if (permissionsError) throw permissionsError;
-
-          permissionsData = [...permissionsData, ...chunkPermissions];
         }
 
-        const permissionsBySecret = new Map();
-        permissionsData.forEach((permission) => {
-          const current = permissionsBySecret.get(permission.secret_id) || [];
-          current.push(permission);
-          permissionsBySecret.set(permission.secret_id, current);
-        });
+        const permissionsBySecret = buildPermissionsBySecret(permissionsData);
 
         visibleSecrets = secretsData.map(secret => {
           let myPermission = 'none';
@@ -146,6 +151,37 @@ export const useSecrets = () => {
             owner_email: secret.owner?.email || 'Desconhecido'
           };
         });
+
+        if (isAdmin) {
+          setSecrets(visibleSecrets);
+          setLoading(false);
+
+          Promise.all(secretIdChunks.map(async (secretIds) => {
+            const { data = [], error } = await supabase
+              .from('secret_permissions')
+              .select('secret_id, granted_to_group_id')
+              .in('secret_id', secretIds)
+              .is('revoked_at', null)
+              .not('granted_to_group_id', 'is', null);
+            if (error) throw error;
+            return data;
+          }))
+            .then((permissionChunks) => {
+              const adminPermissionsBySecret = buildPermissionsBySecret(permissionChunks.flat());
+              setSecrets((currentSecrets) => currentSecrets.map((secret) => {
+                const secretPermissions = adminPermissionsBySecret.get(secret.id) || [];
+                const groupNames = Array.from(new Set(
+                  secretPermissions
+                    .map((permission) => groupNameById.get(permission.granted_to_group_id))
+                    .filter(Boolean)
+                )).sort();
+                return { ...secret, group_names: groupNames };
+              }));
+            })
+            .catch((permissionsError) => {
+              console.warn('Could not fetch access groups in background:', permissionsError.message);
+            });
+        }
       }
 
       let catalogSecrets = [];
@@ -172,7 +208,9 @@ export const useSecrets = () => {
         console.warn('Could not fetch limited secret catalog:', catalogError.message);
       }
 
-      setSecrets([...visibleSecrets, ...catalogSecrets].filter((secret) => secret.my_permission !== 'none'));
+      if (!(profileData?.is_admin || profileData?.role === 'admin')) {
+        setSecrets([...visibleSecrets, ...catalogSecrets].filter((secret) => secret.my_permission !== 'none'));
+      }
 
     } catch (err) {
       console.error('Error fetching secrets:', err);
