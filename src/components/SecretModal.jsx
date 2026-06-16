@@ -89,7 +89,7 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
       if (!isOpen || !user?.id) return;
       setLoadingGroups(true);
       const [groupsResult, membersResult] = await Promise.all([
-        supabase.from('groups').select('id, name').order('name'),
+        supabase.from('groups').select('id, name, description').order('name'),
         supabase
           .from('group_members')
           .select('group_id, role, profiles:user_id(email, full_name)')
@@ -465,6 +465,12 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
                               <TooltipContent className="max-w-sm">
                                 <div className="space-y-2">
                                   <p className="font-medium text-gray-900">{group.name}</p>
+                                  {group.description ? (
+                                    <p className="rounded-md bg-gray-50 p-2 text-xs leading-relaxed text-gray-700">{group.description}</p>
+                                  ) : (
+                                    <p className="text-xs text-gray-500">Sem descricao cadastrada para este grupo.</p>
+                                  )}
+                                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Usuarios com acesso</p>
                                   {!group.membersLoaded ? (
                                     <p className="text-xs text-gray-600">Nao foi possivel carregar os membros deste grupo agora.</p>
                                   ) : group.members.length === 0 ? (
