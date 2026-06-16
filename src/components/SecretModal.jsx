@@ -184,18 +184,53 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
   };
 
   const syncGroupPermissions = async (secretId) => {
-    const { error: revokeError } = await supabase
+    const { data: existingGroupPermissions = [], error: existingError } = await supabase
       .from('secret_permissions')
-      .update({ revoked_at: new Date().toISOString() })
+      .select('id, granted_to_group_id')
       .eq('secret_id', secretId)
-      .is('revoked_at', null)
       .not('granted_to_group_id', 'is', null);
 
-    if (revokeError) throw revokeError;
+    if (existingError) throw existingError;
+
+    const existingByGroupId = new Map(existingGroupPermissions.map((permission) => [permission.granted_to_group_id, permission]));
+    const selectedGroupIdSet = new Set(selectedGroupIds);
+    const groupIdsToRevoke = existingGroupPermissions
+      .filter((permission) => !selectedGroupIdSet.has(permission.granted_to_group_id))
+      .map((permission) => permission.granted_to_group_id);
+
+    if (groupIdsToRevoke.length > 0) {
+      const { error: revokeRemovedError } = await supabase
+        .from('secret_permissions')
+        .update({ revoked_at: new Date().toISOString() })
+        .eq('secret_id', secretId)
+        .in('granted_to_group_id', groupIdsToRevoke);
+
+      if (revokeRemovedError) throw revokeRemovedError;
+    }
 
     if (selectedGroupIds.length === 0) return;
 
-    const permissionPayloads = selectedGroupIds.map((groupId) => ({
+    const permissionsToUpdate = selectedGroupIds
+      .map((groupId) => existingByGroupId.get(groupId))
+      .filter(Boolean);
+
+    if (permissionsToUpdate.length > 0) {
+      const { error: updateExistingError } = await supabase
+        .from('secret_permissions')
+        .update({
+          permission_level: groupPermissionLevel,
+          granted_by_id: user.id,
+          revoked_at: null,
+        })
+        .in('id', permissionsToUpdate.map((permission) => permission.id));
+
+      if (updateExistingError) throw updateExistingError;
+    }
+
+    const newGroupIds = selectedGroupIds.filter((groupId) => !existingByGroupId.has(groupId));
+    if (newGroupIds.length === 0) return;
+
+    const permissionPayloads = newGroupIds.map((groupId) => ({
       secret_id: secretId,
       granted_to_user_id: null,
       granted_to_group_id: groupId,
@@ -251,7 +286,7 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
         if (error) throw error;
         await syncGroupPermissions(secret.id);
         await logAction('update_secret', 'secret', secret.id, { title: payload.title, groups: selectedGroupIds.length });
-        toast({ title: 'Sucesso', description: 'Segredo atualizado com sucesso.' });
+        toast({ title: 'Sucesso', description: 'Acesso atualizado com sucesso.' });
       } else {
         const { data, error } = await supabase
           .from('secrets')
@@ -263,7 +298,7 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
         savedSecretId = data.id;
         await syncGroupPermissions(data.id);
         await logAction('create_secret', 'secret', data.id, { title: payload.title, groups: selectedGroupIds.length });
-        toast({ title: 'Sucesso', description: 'Segredo criado com sucesso.' });
+        toast({ title: 'Sucesso', description: 'Acesso criado com sucesso.' });
       }
 
       if (onSuccess) onSuccess(savedSecretId);
@@ -276,7 +311,7 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
       });
       toast({
         variant: 'destructive',
-        title: secret ? 'Erro ao atualizar' : 'Erro ao criar segredo',
+        title: secret ? 'Erro ao atualizar' : 'Erro ao criar acesso',
         description: err.message
       });
     } finally {
@@ -289,7 +324,7 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
       <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
         <DialogContent className="sm:max-w-[680px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{secret ? 'Editar Segredo' : 'Criar Segredo'}</DialogTitle>
+            <DialogTitle>{secret ? 'Editar Acesso' : 'Criar Acesso'}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4 py-2" noValidate>
               <div className="grid grid-cols-1 gap-4">
