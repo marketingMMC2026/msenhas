@@ -75,13 +75,16 @@ const VaultPage = () => {
         setAuditSecrets([]);
         setAuditError(error.message);
       } else {
-        setAuditSecrets((data || []).map((secret) => ({
-          ...secret,
-          is_archived: Boolean(secret.deleted_at),
-          is_catalog_only: false,
-          my_permission: 'audit',
-          owner_email: secret.owner_email || 'Desconhecido'
-        })));
+        setAuditSecrets((data || [])
+          .filter((secret) => secret.is_personal && secret.owner_id === auditUserId)
+          .map((secret) => ({
+            ...secret,
+            group_names: [],
+            is_archived: Boolean(secret.deleted_at),
+            is_catalog_only: false,
+            my_permission: 'audit',
+            owner_email: secret.owner_email || 'Desconhecido'
+          })));
       }
       setAuditLoading(false);
     };
@@ -187,7 +190,7 @@ const VaultPage = () => {
 
         {can('manageUsers') && (
           <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-            <label htmlFor="audit-user" className="block text-sm font-medium text-gray-700">Auditar acessos de usuario</label>
+            <label htmlFor="audit-user" className="block text-sm font-medium text-gray-700">Auditar acessos particulares de usuario</label>
             <div className="mt-2 grid gap-3 md:grid-cols-[minmax(260px,420px)_1fr]">
               <select
                 id="audit-user"
@@ -203,7 +206,7 @@ const VaultPage = () => {
                 ))}
               </select>
               <p className="text-sm text-gray-500">
-                Ao selecionar uma pessoa, voce ve quais acessos ela possui, mas nao abre senha, 2FA ou detalhes sensiveis.
+                Ao selecionar uma pessoa, voce ve somente os acessos particulares dela, sem abrir senha, 2FA ou detalhes sensiveis.
               </p>
             </div>
           </div>

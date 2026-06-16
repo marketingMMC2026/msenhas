@@ -1,4 +1,4 @@
--- Safe admin audit view: list private accesses owned by a user without exposing secrets.
+-- Restrict admin audit to private accesses owned by the selected user.
 begin;
 
 create or replace function public.admin_list_user_accesses(p_user_id uuid)
@@ -33,10 +33,7 @@ as $$
     s.password_strength,
     s.updated_at,
     s.deleted_at,
-    case
-      when coalesce(s.is_personal, false) = true then 'personal'
-      else 'owner'
-    end as access_type,
+    'personal'::text as access_type,
     '{}'::text[] as group_names,
     owner_profile.email as owner_email
   from public.secrets s
