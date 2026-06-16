@@ -8,13 +8,14 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useAuditLog } from '@/hooks/useAuditLog';
-import { Eye, EyeOff, Copy, ExternalLink, Edit2, Share2, Archive, RotateCcw, Clock, History } from 'lucide-react';
+import { Eye, EyeOff, Copy, ExternalLink, Edit2, Share2, Archive, RotateCcw, Clock, History, Tag, Users, ShieldCheck, CalendarDays } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { handleSupabaseError } from '@/utils/handleSupabaseError';
 import { sanitizeAuditDetails } from '@/utils/sanitizeAuditDetails';
 import { decryptSecretText } from '@/lib/secretCrypto';
 import { supabase } from '@/lib/supabase';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { getPasswordStrength, getPasswordStrengthClassName, getPasswordStrengthLabel } from '@/lib/accessUtils';
 
 const actionLabelKey = {
   password_changed: 'passwordChanged',
@@ -138,6 +139,9 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onArchive, 
   const canManage = ['owner', 'admin', 'manage_access'].includes(secret.my_permission);
   const visibleSecret = decryptError ? '' : (decryptedSecret || secret.secret_value || '');
   const visibleTwofa = decryptError ? '' : (decryptedTwofa || secret.twofa_recovery || '');
+  const computedStrength = getPasswordStrength(visibleSecret);
+  const strengthLevel = secret.password_strength || (computedStrength.level === 'unknown' ? null : computedStrength.level);
+  const groupNames = Array.isArray(secret.group_names) ? secret.group_names.filter(Boolean) : [];
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -177,6 +181,60 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onArchive, 
              </div>
           </div>
 
+          <div className="rounded-lg border border-gray-200 bg-gray-50/60 p-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  <Users className="h-3.5 w-3.5" /> Grupos
+                </div>
+                {secret.is_personal ? (
+                  <span className="inline-flex rounded-full bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700">Particular</span>
+                ) : groupNames.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {groupNames.map((groupName) => (
+                      <span key={groupName} className="rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700">{groupName}</span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">Nenhum grupo informado.</p>
+                )}
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Forca da senha
+                </div>
+                <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${getPasswordStrengthClassName(strengthLevel)}`}>
+                  {getPasswordStrengthLabel(strengthLevel)}
+                </span>
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  <Tag className="h-3.5 w-3.5" /> Tags
+                </div>
+                {secret.tags?.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {secret.tags.map((tag) => (
+                      <span key={tag} className="rounded-full bg-white px-2 py-1 text-xs font-medium text-gray-700 ring-1 ring-gray-200">{tag}</span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">Sem tags.</p>
+                )}
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  <CalendarDays className="h-3.5 w-3.5" /> Expiracao
+                </div>
+                <p className={secret.expires_at ? 'text-sm text-orange-700' : 'text-sm text-gray-500'}>
+                  {secret.expires_at ? new Date(secret.expires_at).toLocaleDateString('pt-BR') : 'Sem expiracao definida.'}
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div>
             <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider flex justify-between">
               Senha
@@ -202,8 +260,7 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onArchive, 
             </div>
           </div>
 
-          {(visibleTwofa || secret.notes) && (
-            <div className="grid gap-4">
+          <div className="grid gap-4">
               {visibleTwofa && (
                 <div>
                   <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Recuperacao 2FA</label>
@@ -212,14 +269,15 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onArchive, 
                   </div>
                 </div>
               )}
-              {secret.notes && (
-                <div>
-                   <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Notas</label>
-                   <p className="mt-1 text-sm text-gray-700 whitespace-pre-wrap">{secret.notes}</p>
-                </div>
-              )}
+              <div>
+                 <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Notas</label>
+                 {secret.notes ? (
+                   <p className="mt-1 rounded-md border border-gray-200 bg-white p-3 text-sm text-gray-700 whitespace-pre-wrap">{secret.notes}</p>
+                 ) : (
+                   <p className="mt-1 text-sm text-gray-500">Sem notas registradas.</p>
+                 )}
+              </div>
             </div>
-          )}
 
           <div className="rounded-lg border border-gray-200 bg-white">
             <div className="flex items-center gap-2 border-b border-gray-100 px-4 py-3 font-semibold text-gray-900">
@@ -266,11 +324,7 @@ const SecretViewModal = ({ isOpen, onClose, secret, onEdit, onShare, onArchive, 
           </div>
 
           <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t">
-            <div className="flex gap-2">
-               {secret.tags && secret.tags.map(tag => (
-                 <span key={tag} className="bg-gray-100 px-2 py-0.5 rounded-full">{tag}</span>
-               ))}
-            </div>
+            <div />
             <div className="flex items-center gap-4">
               {secret.expires_at && (
                 <span className="flex items-center text-orange-600" title="Expira em">

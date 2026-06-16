@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuditLog } from '@/hooks/useAuditLog';
 import { encryptSecretText } from '@/lib/secretCrypto';
+import { getPasswordStrength } from '@/lib/accessUtils';
 import { Upload, Loader2, CheckCircle2, AlertCircle, Wand2 } from 'lucide-react';
 
 const normalize = (value) => String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -219,6 +220,7 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
         title: row.title.trim(),
         login: row.login.trim() || null,
         secret_value: await encryptSecretText(row.secretValue.trim()),
+        password_strength: getPasswordStrength(row.secretValue.trim()).level,
         link: normalizeUrl(row.link) || null,
         notes: row.notes.trim() || null,
         tags: row.tags,

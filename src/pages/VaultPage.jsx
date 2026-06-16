@@ -109,7 +109,34 @@ const VaultPage = () => {
     if (data.is_personal && data.owner_id !== user?.id) {
       throw new Error('Este acesso particular so pode ser visualizado pelo proprio dono.');
     }
-    return { ...secret, ...data, is_archived: Boolean(data.deleted_at), my_permission: secret.my_permission, access_type: secret.access_type, owner_email: data.owner?.email || secret.owner_email };
+
+    let groupNames = Array.isArray(secret.group_names) ? secret.group_names : [];
+    if (!data.is_personal) {
+      const { data: permissionRows, error: permissionsError } = await supabase
+        .from('secret_permissions')
+        .select('granted_to_group_id')
+        .eq('secret_id', secret.id)
+        .is('revoked_at', null)
+        .not('granted_to_group_id', 'is', null);
+
+      if (!permissionsError) {
+        const groupIds = Array.from(new Set((permissionRows || []).map((row) => row.granted_to_group_id).filter(Boolean)));
+        if (groupIds.length > 0) {
+          const { data: groupsData, error: groupsError } = await supabase
+            .from('groups')
+            .select('id, name')
+            .in('id', groupIds);
+
+          if (!groupsError) {
+            groupNames = (groupsData || [])
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((group) => group.name);
+          }
+        }
+      }
+    }
+
+    return { ...secret, ...data, group_names: groupNames, is_archived: Boolean(data.deleted_at), my_permission: secret.my_permission, access_type: secret.access_type, owner_email: data.owner?.email || secret.owner_email };
   };
 
   const handleView = async (secret) => {

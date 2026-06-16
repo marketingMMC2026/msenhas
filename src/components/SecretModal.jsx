@@ -10,6 +10,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAuditLog } from '@/hooks/useAuditLog';
 import { Eye, EyeOff, HelpCircle, Loader2, ShieldCheck, Users } from 'lucide-react';
 import { decryptSecretText, encryptSecretText, isSecretEncryptionConfigured } from '@/lib/secretCrypto';
+import { getPasswordStrength } from '@/lib/accessUtils';
 
 const fieldHelp = {
   title: 'Nome que identifica este acesso. Exemplo: Instagram - Cliente MMC, Meta Business ou Hostinger.',
@@ -262,10 +263,12 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
 
     try {
       const normalizedLink = normalizeUrl(link);
+      const passwordStrength = getPasswordStrength(secretValue.trim()).level;
       const payload = {
         title: title.trim(),
         login: login.trim() || null,
         secret_value: await encryptSecretText(secretValue.trim()),
+        password_strength: passwordStrength === 'unknown' ? null : passwordStrength,
         link: normalizedLink || null,
         notes: notes.trim() || null,
         tags: tags.split(',').map(t => t.trim()).filter(Boolean),
