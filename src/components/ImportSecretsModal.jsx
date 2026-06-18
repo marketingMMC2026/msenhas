@@ -9,18 +9,20 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAuditLog } from '@/hooks/useAuditLog';
 import { encryptSecretText } from '@/lib/secretCrypto';
 import { getPasswordStrength } from '@/lib/accessUtils';
-import { Upload, Loader2, CheckCircle2, AlertCircle, Wand2 } from 'lucide-react';
+import { Upload, Loader2, CheckCircle2, AlertCircle, Wand2, Download, Image, FileSpreadsheet } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 const normalize = (value) => String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const TEMPLATE_PATH = '/templates/mpassword-import-template.xlsx';
 
 const columnAliases = {
-  title: ['titulo', 'nome', 'name', 'title', 'servico', 'servico/site', 'site', 'sistema'],
-  login: ['login', 'usuario', 'user', 'username', 'email', 'conta'],
-  secretValue: ['senha', 'password', 'secret', 'segredo', 'chave'],
-  link: ['link', 'url', 'site', 'endereco'],
-  notes: ['notas', 'observacoes', 'observacao', 'notes', 'descricao'],
-  tags: ['tags', 'categoria', 'categorias'],
-  group: ['grupo', 'grupos', 'group', 'groups', 'equipe', 'team'],
+  title: ['titulo', 'título', 'nome', 'name', 'title', 'acesso', 'servico', 'serviço', 'servico/site', 'sistema', 'ferramenta', 'plataforma'],
+  login: ['login', 'usuario', 'usuário', 'user', 'username', 'email', 'e-mail', 'conta'],
+  secretValue: ['senha', 'password', 'secret', 'segredo', 'chave', 'token', 'credencial'],
+  link: ['link', 'url', 'site', 'endereco', 'endereço', 'website', 'pagina', 'página'],
+  notes: ['notas', 'observacoes', 'observações', 'observacao', 'observação', 'notes', 'descricao', 'descrição', 'detalhes'],
+  tags: ['tags', 'tag', 'categoria', 'categorias', 'marcadores'],
+  group: ['grupo', 'grupos', 'group', 'groups', 'equipe', 'team', 'pasta', 'departamento'],
 };
 
 const splitList = (value) => String(value || '').split(/[|,]/).map((item) => item.trim()).filter(Boolean);
@@ -72,34 +74,49 @@ const normalizeCsvCells = (cells, headers, delimiter) => {
   return normalizedCells;
 };
 
+const findColumnIndexes = (headers) => {
+  const usedIndexes = new Set();
+  const fieldOrder = ['title', 'secretValue', 'login', 'link', 'notes', 'tags', 'group'];
+  const indexes = {};
+
+  fieldOrder.forEach((field) => {
+    const aliases = columnAliases[field].map(normalize);
+    let index = headers.findIndex((header, headerIndex) => !usedIndexes.has(headerIndex) && aliases.includes(header));
+
+    if (index === -1) {
+      index = headers.findIndex((header, headerIndex) => (
+        !usedIndexes.has(headerIndex) &&
+        aliases.some((alias) => header.includes(alias) || alias.includes(header))
+      ));
+    }
+
+    indexes[field] = index;
+    if (index >= 0) usedIndexes.add(index);
+  });
+
+  return indexes;
+};
+
 const buildRow = (row) => ({
   ...row,
   valid: Boolean(String(row.title || '').trim() && String(row.secretValue || '').trim()),
 });
 
-const parseCsv = (content) => {
-  const lines = content.replace(/^\uFEFF/, '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  if (lines.length < 2) return { rows: [], errors: ['A planilha precisa ter cabecalho e pelo menos uma linha.'] };
+const parseMatrix = (matrix) => {
+  const cleanedRows = matrix
+    .map((row) => (row || []).map((cell) => String(cell ?? '').trim()))
+    .filter((row) => row.some(Boolean));
 
-  const delimiter = detectCsvDelimiter(lines[0]);
-  const headers = splitCsvLine(lines[0], delimiter).map(normalize);
-  const findIndex = (field) => headers.findIndex((header) => columnAliases[field].includes(header));
-  const indexes = {
-    title: findIndex('title'),
-    login: findIndex('login'),
-    secretValue: findIndex('secretValue'),
-    link: findIndex('link'),
-    notes: findIndex('notes'),
-    tags: findIndex('tags'),
-    group: findIndex('group'),
-  };
+  if (cleanedRows.length < 2) return { rows: [], errors: ['A planilha precisa ter cabecalho e pelo menos uma linha.'] };
+
+  const headers = cleanedRows[0].map(normalize);
+  const indexes = findColumnIndexes(headers);
 
   const errors = [];
   if (indexes.title === -1) errors.push('Nao encontrei uma coluna de titulo/nome.');
   if (indexes.secretValue === -1) errors.push('Nao encontrei uma coluna de senha.');
 
-  const rows = lines.slice(1).map((line, index) => {
-    const cells = normalizeCsvCells(splitCsvLine(line, delimiter), headers, delimiter);
+  const rows = cleanedRows.slice(1).map((cells, index) => {
     return buildRow({
       rowNumber: index + 2,
       title: indexes.title >= 0 ? cells[indexes.title]?.trim() || '' : '',
@@ -115,8 +132,26 @@ const parseCsv = (content) => {
   return { rows, errors };
 };
 
+const parseCsv = (content) => {
+  const lines = content.replace(/^\uFEFF/, '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length < 2) return { rows: [], errors: ['A planilha precisa ter cabecalho e pelo menos uma linha.'] };
+
+  const delimiter = detectCsvDelimiter(lines[0]);
+  const headers = splitCsvLine(lines[0], delimiter).map(normalize);
+  const matrix = lines.map((line) => normalizeCsvCells(splitCsvLine(line, delimiter), headers, delimiter));
+  return parseMatrix(matrix);
+};
+
+const parseExcelFile = async (file) => {
+  const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: false });
+  const firstSheetName = workbook.SheetNames[0];
+  if (!firstSheetName) return { rows: [], errors: ['Nao encontrei nenhuma aba na planilha.'] };
+  const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheetName], { header: 1, defval: '', raw: false });
+  return parseMatrix(matrix);
+};
+
 const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const { toast } = useToast();
   const { logAction } = useAuditLog();
   const [rows, setRows] = useState([]);
@@ -127,10 +162,14 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
   const [selectedGroups, setSelectedGroups] = useState([]);
   const [permissionLevel, setPermissionLevel] = useState('view');
   const [loading, setLoading] = useState(false);
+  const [showTemplatePreview, setShowTemplatePreview] = useState(false);
 
   const validRows = useMemo(() => rows.filter((row) => row.valid), [rows]);
   const invalidRows = rows.length - validRows.length;
   const groupsFromRows = useMemo(() => Array.from(new Set(validRows.flatMap((row) => row.groupNames))).sort(), [validRows]);
+  const importLimit = role === 'admin' ? Infinity : 50;
+  const hasImportLimit = Number.isFinite(importLimit);
+  const overImportLimit = hasImportLimit && validRows.length > importLimit;
 
   const fetchTargets = async () => {
     if (!user?.id) return;
@@ -150,6 +189,7 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
     setSelectedUsers([]);
     setSelectedGroups([]);
     setPermissionLevel('view');
+    setShowTemplatePreview(false);
   };
 
   const handleClose = () => { reset(); onClose(); };
@@ -157,12 +197,15 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
   const handleFileChange = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!file.name.toLowerCase().endsWith('.csv') && !file.name.toLowerCase().endsWith('.txt')) {
+    const fileName = file.name.toLowerCase();
+    const isExcelFile = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+    const isCsvFile = fileName.endsWith('.csv') || fileName.endsWith('.txt');
+    if (!isExcelFile && !isCsvFile) {
       setRows([]);
-      setErrors(['Use um arquivo CSV exportado da planilha.']);
+      setErrors(['Use um arquivo Excel (.xlsx/.xls) ou CSV exportado da planilha.']);
       return;
     }
-    const parsed = parseCsv(await file.text());
+    const parsed = isExcelFile ? await parseExcelFile(file) : parseCsv(await file.text());
     setRows(parsed.rows);
     setErrors(parsed.errors);
   };
@@ -210,6 +253,14 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
 
   const handleImport = async () => {
     if (!user?.id || validRows.length === 0) return;
+    if (overImportLimit) {
+      toast({
+        title: 'Limite de importacao',
+        description: `Seu perfil pode importar ate ${importLimit} acessos por vez. Divida a planilha e tente novamente.`,
+        variant: 'destructive'
+      });
+      return;
+    }
     setLoading(true);
     let insertedSecrets = [];
     try {
@@ -261,14 +312,74 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Importar senhas por planilha</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Importar acessos por planilha</DialogTitle></DialogHeader>
         <div className="space-y-5">
           <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
-            Exporte sua planilha como CSV com colunas como <strong>titulo</strong>, <strong>login</strong>, <strong>senha</strong>, <strong>link</strong>, <strong>notas</strong>, <strong>tags</strong> e <strong>grupo</strong>. Depois revise tudo abaixo antes de importar; grupos que nao existirem serao criados automaticamente.
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="space-y-2">
+                <p className="font-medium">Use o modelo abaixo ou importe uma planilha Excel/CSV com colunas equivalentes.</p>
+                <ol className="list-decimal space-y-1 pl-4">
+                  <li>Baixe o modelo Excel.</li>
+                  <li>Preencha as colunas <strong>titulo</strong>, <strong>login</strong>, <strong>senha</strong>, <strong>link</strong>, <strong>notas</strong>, <strong>tags</strong> e <strong>grupo</strong>.</li>
+                  <li>Envie a planilha, revise os dados reconhecidos e ajuste qualquer campo antes de importar.</li>
+                </ol>
+                {hasImportLimit && <p className="text-blue-800">Seu perfil pode importar ate <strong>{importLimit} acessos por vez</strong>.</p>}
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Button asChild type="button" variant="outline" className="border-blue-200 bg-white text-blue-700 hover:bg-blue-50">
+                  <a href={TEMPLATE_PATH} download>
+                    <Download className="mr-2 h-4 w-4" /> Baixar modelo Excel
+                  </a>
+                </Button>
+                <Button type="button" variant="outline" className="border-blue-200 bg-white text-blue-700 hover:bg-blue-50" onClick={() => setShowTemplatePreview((value) => !value)}>
+                  <Image className="mr-2 h-4 w-4" /> Ver imagem exemplo
+                </Button>
+              </div>
+            </div>
           </div>
+
+          {showTemplatePreview && (
+            <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-800">
+                <FileSpreadsheet className="h-4 w-4 text-green-600" /> Exemplo visual da planilha
+              </div>
+              <div className="overflow-auto rounded-md border border-gray-200">
+                <table className="min-w-[940px] w-full text-left text-xs">
+                  <thead className="bg-green-50 text-green-900">
+                    <tr>
+                      {['titulo', 'login', 'senha', 'link', 'notas', 'tags', 'grupo'].map((header) => (
+                        <th key={header} className="border-b border-green-100 px-3 py-2 font-semibold">{header}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    <tr>
+                      <td className="px-3 py-2">Instagram - Cliente MMC</td>
+                      <td className="px-3 py-2">marketing@empresa.com</td>
+                      <td className="px-3 py-2">SenhaForte#2026</td>
+                      <td className="px-3 py-2">https://instagram.com</td>
+                      <td className="px-3 py-2">Conta usada pela equipe de social media.</td>
+                      <td className="px-3 py-2">marketing, cliente</td>
+                      <td className="px-3 py-2">Marketing</td>
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-2">Hostinger - Cliente ABC</td>
+                      <td className="px-3 py-2">admin</td>
+                      <td className="px-3 py-2">OutraSenha#2026</td>
+                      <td className="px-3 py-2">https://hpanel.hostinger.com</td>
+                      <td className="px-3 py-2">Hospedagem do site institucional.</td>
+                      <td className="px-3 py-2">cliente, site</td>
+                      <td className="px-3 py-2">Acessos de Clientes</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2">
-            <Label htmlFor="csv-file">Arquivo CSV</Label>
-            <input id="csv-file" type="file" accept=".csv,.txt" onChange={handleFileChange} className="block w-full text-sm text-gray-700 file:mr-4 file:rounded-md file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-blue-700" />
+            <Label htmlFor="csv-file">Arquivo Excel ou CSV</Label>
+            <input id="csv-file" type="file" accept=".xlsx,.xls,.csv,.txt" onChange={handleFileChange} className="block w-full text-sm text-gray-700 file:mr-4 file:rounded-md file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-blue-700" />
           </div>
           {errors.length > 0 && <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errors.map((error) => <div key={error} className="flex gap-2"><AlertCircle className="mt-0.5 h-4 w-4" /> {error}</div>)}</div>}
           {rows.length > 0 && <>
@@ -276,6 +387,7 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
               <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-3 py-1 text-green-700"><CheckCircle2 className="h-4 w-4" /> {validRows.length} valida(s)</span>
               {invalidRows > 0 && <span className="inline-flex items-center gap-1 rounded-full bg-yellow-50 px-3 py-1 text-yellow-800"><AlertCircle className="h-4 w-4" /> {invalidRows} incompleta(s)</span>}
               {groupsFromRows.length > 0 && <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">{groupsFromRows.length} grupo(s) nas linhas</span>}
+              {overImportLimit && <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-3 py-1 text-red-700"><AlertCircle className="h-4 w-4" /> Limite de {importLimit} acessos por importacao</span>}
             </div>
 
             <div className="rounded-lg border border-gray-200 bg-white">
@@ -347,7 +459,7 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
 
           <div className="space-y-2"><Label>Nivel de permissao para os acessos selecionados</Label><Select value={permissionLevel} onValueChange={setPermissionLevel}><SelectTrigger className="max-w-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="view">Visualizar</SelectItem><SelectItem value="edit">Editar</SelectItem><SelectItem value="manage_access">Gerenciar acessos</SelectItem></SelectContent></Select></div>
         </div>
-        <DialogFooter><Button type="button" variant="outline" onClick={handleClose} disabled={loading}>Cancelar</Button><Button onClick={handleImport} disabled={loading || validRows.length === 0} className="bg-blue-600 text-white hover:bg-blue-700">{loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Importando...</> : <><Upload className="mr-2 h-4 w-4" /> Importar senhas</>}</Button></DialogFooter>
+        <DialogFooter><Button type="button" variant="outline" onClick={handleClose} disabled={loading}>Cancelar</Button><Button onClick={handleImport} disabled={loading || validRows.length === 0 || overImportLimit} className="bg-blue-600 text-white hover:bg-blue-700">{loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Importando...</> : <><Upload className="mr-2 h-4 w-4" /> Importar acessos</>}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );
