@@ -37,7 +37,7 @@ const Header = ({ onMenuClick }) => {
             <button onClick={onMenuClick} className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors" aria-label="Abrir menu">
               <Menu className="h-6 w-6 text-gray-600" />
             </button>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">{t('appName')}</h1>
+            <img src="/brand/mpassword-logo.jpg" alt={t('appName')} className="h-8 w-auto object-contain" />
           </div>
 
           <div className="flex items-center gap-3">
