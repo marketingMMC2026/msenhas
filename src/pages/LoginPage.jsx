@@ -59,7 +59,7 @@ const LoginPage = () => {
 
           <div className="bg-white rounded-2xl shadow-xl p-8">
             <div className="text-center mb-8">
-              <img src="/brand/mpassword-logo.jpg" alt="M Password" className="mx-auto mb-4 h-16 w-auto max-w-full object-contain" />
+              <img src="/brand/mpassword-logo.jpg" alt="M Password" className="mx-auto mb-4 h-24 w-auto max-w-full object-contain" />
               <p className="text-gray-600">Acesse sua conta segura</p>
             </div>
 
