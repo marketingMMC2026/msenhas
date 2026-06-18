@@ -5,13 +5,37 @@ import LoadingSpinner from '@/components/LoadingSpinner';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/hooks/useAuth';
-import { getAccessInitial, getFaviconUrl, getPasswordStrengthClassName, getPasswordStrengthLabel } from '@/lib/accessUtils';
+import { getAccessIconTheme, getAccessInitial, getFaviconUrl, getPasswordStrengthClassName, getPasswordStrengthLabel } from '@/lib/accessUtils';
 
 const AccessIcon = ({ secret }) => {
   const favicon = getFaviconUrl(secret.link);
   const [failed, setFailed] = useState(false);
-  if (favicon && !failed) return <img src={favicon} alt="" className="h-8 w-8 rounded-md border border-gray-200 bg-white p-1" onError={() => setFailed(true)} />;
-  return <div className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-50 text-sm font-semibold text-blue-700">{getAccessInitial(secret.title)}</div>;
+  const theme = getAccessIconTheme(secret.title);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [favicon, secret.title]);
+
+  if (favicon && !failed) {
+    return (
+      <img
+        src={favicon}
+        alt=""
+        className="h-8 w-8 rounded-md border border-gray-200 bg-white p-1"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+
+  return (
+    <div
+      className="flex h-8 w-8 items-center justify-center rounded-md border text-sm font-semibold shadow-sm"
+      style={{ backgroundColor: theme.bg, borderColor: theme.border, color: theme.text }}
+      aria-hidden="true"
+    >
+      {getAccessInitial(secret.title)}
+    </div>
+  );
 };
 
 const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onView, onEdit, onArchive, onRestore, onShare, auditMode = false, auditUser = null }) => {

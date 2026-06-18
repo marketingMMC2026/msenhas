@@ -16,12 +16,34 @@ export const getHostname = (link) => {
 export const getFaviconUrl = (link) => {
   const hostname = getHostname(link);
   if (!hostname) return '';
-  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=64`;
+  return `https://${hostname}/favicon.ico`;
 };
 
 export const getAccessInitial = (title = '') => {
   const cleaned = String(title).trim();
   return (cleaned[0] || 'A').toUpperCase();
+};
+
+const accessIconThemes = [
+  { bg: '#334155', text: '#f8fafc', border: '#1e293b' },
+  { bg: '#365314', text: '#f7fee7', border: '#1a2e05' },
+  { bg: '#4c1d95', text: '#f5f3ff', border: '#2e1065' },
+  { bg: '#7f1d1d', text: '#fef2f2', border: '#450a0a' },
+  { bg: '#164e63', text: '#ecfeff', border: '#083344' },
+  { bg: '#713f12', text: '#fefce8', border: '#422006' },
+  { bg: '#374151', text: '#f9fafb', border: '#111827' },
+  { bg: '#064e3b', text: '#ecfdf5', border: '#022c22' },
+  { bg: '#312e81', text: '#eef2ff', border: '#1e1b4b' },
+  { bg: '#831843', text: '#fdf2f8', border: '#500724' },
+];
+
+export const getAccessIconTheme = (title = '') => {
+  const source = String(title || 'A');
+  let hash = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    hash = (hash * 31 + source.charCodeAt(index)) >>> 0;
+  }
+  return accessIconThemes[hash % accessIconThemes.length];
 };
 
 export const getPasswordStrength = (password = '') => {
