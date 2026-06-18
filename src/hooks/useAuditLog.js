@@ -12,12 +12,19 @@ export const useAuditLog = () => {
     }
 
     try {
+      const context = {
+        ...details,
+        page_path: window.location.pathname,
+        user_agent: navigator.userAgent,
+        logged_at: new Date().toISOString(),
+      };
+
       const { error } = await supabase.from('audit_logs').insert({
         user_id: user.id,
         action,
         resource_type: resourceType,
         resource_id: resourceId,
-        details,
+        details: context,
       });
 
       if (error) {

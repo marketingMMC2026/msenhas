@@ -4,6 +4,8 @@ import { validateDomain } from '@/utils/validateDomain';
 import { getCapabilities, getUserRole, hasCapability } from '@/lib/permissions';
 
 const AuthContext = createContext(undefined);
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+const IDLE_WARNING_MS = 2 * 60 * 1000;
 
 export const isAbortError = (error) => {
   return (
@@ -23,8 +25,14 @@ export const AuthProvider = ({ children }) => {
 
   const [error, setError] = useState(null);
   const [profileLoadError, setProfileLoadError] = useState(null);
+  const [showIdleWarning, setShowIdleWarning] = useState(false);
+  const [idleRemainingSeconds, setIdleRemainingSeconds] = useState(Math.floor(IDLE_WARNING_MS / 1000));
 
   const mounted = useRef(true);
+  const warningTimerRef = useRef(null);
+  const logoutTimerRef = useRef(null);
+  const countdownTimerRef = useRef(null);
+  const lastActivityRef = useRef(Date.now());
 
   const applyPendingInvite = useCallback(async (baseProfile) => {
     try {
@@ -272,6 +280,95 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const clearIdleTimers = useCallback(() => {
+    if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
+    if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
+    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+    warningTimerRef.current = null;
+    logoutTimerRef.current = null;
+    countdownTimerRef.current = null;
+  }, []);
+
+  const logSessionTimeout = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      await supabase.from('audit_logs').insert({
+        user_id: user.id,
+        action: 'session_timeout',
+        resource_type: 'auth',
+        resource_id: user.id,
+        details: {
+          reason: 'idle_timeout',
+          idle_minutes: 30,
+          page_path: window.location.pathname,
+          user_agent: navigator.userAgent,
+          logged_at: new Date().toISOString(),
+        },
+      });
+    } catch (err) {
+      console.warn('[useAuth] Could not log session timeout:', err.message);
+    }
+  }, [user?.id]);
+
+  const startIdleTimers = useCallback(() => {
+    clearIdleTimers();
+    if (!session?.user) return;
+
+    lastActivityRef.current = Date.now();
+    setShowIdleWarning(false);
+    setIdleRemainingSeconds(Math.floor(IDLE_WARNING_MS / 1000));
+
+    warningTimerRef.current = setTimeout(() => {
+      setShowIdleWarning(true);
+      setIdleRemainingSeconds(Math.floor(IDLE_WARNING_MS / 1000));
+      countdownTimerRef.current = setInterval(() => {
+        setIdleRemainingSeconds((seconds) => Math.max(0, seconds - 1));
+      }, 1000);
+    }, IDLE_TIMEOUT_MS - IDLE_WARNING_MS);
+
+    logoutTimerRef.current = setTimeout(async () => {
+      clearIdleTimers();
+      setShowIdleWarning(false);
+      await logSessionTimeout();
+      await signOut();
+    }, IDLE_TIMEOUT_MS);
+  }, [clearIdleTimers, logSessionTimeout, session?.user]);
+
+  useEffect(() => {
+    if (!session?.user) {
+      clearIdleTimers();
+      setShowIdleWarning(false);
+      return undefined;
+    }
+
+    const activityEvents = ['click', 'keydown', 'scroll', 'touchstart'];
+    const handleActivity = () => startIdleTimers();
+    const expireIdleSession = async () => {
+      clearIdleTimers();
+      setShowIdleWarning(false);
+      await logSessionTimeout();
+      await signOut();
+    };
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - lastActivityRef.current >= IDLE_TIMEOUT_MS) {
+        await expireIdleSession();
+        return;
+      }
+      startIdleTimers();
+    };
+
+    startIdleTimers();
+    activityEvents.forEach((eventName) => window.addEventListener(eventName, handleActivity, { passive: true }));
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      activityEvents.forEach((eventName) => window.removeEventListener(eventName, handleActivity));
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearIdleTimers();
+    };
+  }, [clearIdleTimers, session?.user, startIdleTimers]);
+
   const role = getUserRole(profile);
   const capabilities = getCapabilities(profile);
   const can = (capability) => hasCapability(profile, capability);
@@ -295,7 +392,39 @@ export const AuthProvider = ({ children }) => {
     isAbortError
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  const idleMinutes = Math.ceil(idleRemainingSeconds / 60);
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      {showIdleWarning && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold text-gray-900">Sessao quase expirando</h2>
+            <p className="mt-2 text-sm leading-6 text-gray-600">
+              Por seguranca, sua sessao sera encerrada por inatividade em cerca de {idleMinutes} minuto(s).
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={signOut}
+                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Sair agora
+              </button>
+              <button
+                type="button"
+                onClick={startIdleTimers}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                Continuar sessao
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </AuthContext.Provider>
+  );
 };
 
 export const useAuth = () => {

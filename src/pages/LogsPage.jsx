@@ -33,8 +33,32 @@ const LogsPage = () => {
   }, [page, filters.action, filters.resourceType, filters.startDate, filters.endDate]);
 
   const fetchFilterOptions = async () => {
-    setUniqueActions(['login', 'logout', 'create_secret', 'view_secret', 'create_group', 'delete_group', 'update_user_is_admin', 'update_user_is_active', 'approve_request', 'deny_request']);
-    setUniqueResourceTypes(['auth', 'secret', 'group', 'profile', 'access_request']);
+    setUniqueActions([
+      'session_timeout',
+      'create_secret',
+      'update_secret',
+      'reveal_secret',
+      'copy_secret',
+      'import_secrets',
+      'grant_permission',
+      'revoke_permission',
+      'create_group',
+      'delete_group',
+      'add_group_member',
+      'remove_group_member',
+      'update_member_role',
+      'update_user_role',
+      'update_user_groups',
+      'update_invite_role',
+      'update_invite_groups',
+      'toggle_active',
+      'update_profile',
+      'approve_request',
+      'deny_request',
+      'login',
+      'logout'
+    ]);
+    setUniqueResourceTypes(['auth', 'secret', 'group', 'profile', 'user', 'user_invitation', 'access_request', 'import']);
   };
 
   const fetchLogs = async () => {

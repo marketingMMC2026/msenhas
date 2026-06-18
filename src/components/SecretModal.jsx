@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAuditLog } from '@/hooks/useAuditLog';
 import { Eye, EyeOff, HelpCircle, Loader2, ShieldCheck, Users } from 'lucide-react';
 import { decryptSecretText, encryptSecretText, isSecretEncryptionConfigured } from '@/lib/secretCrypto';
-import { getPasswordStrength } from '@/lib/accessUtils';
+import { getPasswordStrength, getPasswordStrengthClassName, getPasswordStrengthLabel } from '@/lib/accessUtils';
 
 const fieldHelp = {
   title: 'Nome que identifica este acesso. Exemplo: Instagram - Cliente MMC, Meta Business ou Hostinger.',
@@ -81,6 +81,7 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
   const [availableGroups, setAvailableGroups] = useState([]);
   const [selectedGroupIds, setSelectedGroupIds] = useState([]);
   const [groupPermissionLevel, setGroupPermissionLevel] = useState('view');
+  const currentPasswordStrength = getPasswordStrength(secretValue);
 
   useEffect(() => {
     let cancelled = false;
@@ -384,6 +385,14 @@ const SecretModal = ({ isOpen, onClose, secret, onSuccess }) => {
                               {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                             </button>
                           </div>
+                          {secretValue && (
+                            <div className="flex items-center justify-between gap-2 rounded-md border border-gray-100 bg-gray-50 px-2 py-1.5 text-xs">
+                              <span className="text-gray-500">Forca da senha</span>
+                              <span className={`rounded-full border px-2 py-0.5 font-medium ${getPasswordStrengthClassName(currentPasswordStrength.level)}`}>
+                                {getPasswordStrengthLabel(currentPasswordStrength.level)}
+                              </span>
+                            </div>
+                          )}
                       </div>
                   </div>
 

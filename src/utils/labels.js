@@ -1,6 +1,7 @@
 const actionLabels = {
   login: 'Login',
   logout: 'Logout',
+  session_timeout: 'Sessao expirada por inatividade',
   create_secret: 'Senha criada',
   update_secret: 'Senha atualizada',
   delete_secret: 'Senha excluida',
@@ -17,6 +18,10 @@ const actionLabels = {
   add_group_member: 'Membro adicionado',
   remove_group_member: 'Membro removido',
   update_member_role: 'Permissao do grupo alterada',
+  update_user_role: 'Perfil de usuario alterado',
+  update_user_groups: 'Grupos do usuario alterados',
+  update_invite_role: 'Perfil do convite alterado',
+  update_invite_groups: 'Grupos do convite alterados',
   toggle_admin: 'Administrador alterado',
   toggle_active: 'Status do usuario alterado',
   update_profile: 'Perfil atualizado',
