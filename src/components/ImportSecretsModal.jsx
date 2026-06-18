@@ -2,18 +2,25 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuditLog } from '@/hooks/useAuditLog';
 import { encryptSecretText } from '@/lib/secretCrypto';
 import { getPasswordStrength } from '@/lib/accessUtils';
-import { Upload, Loader2, CheckCircle2, AlertCircle, Wand2, Download, Image, FileSpreadsheet } from 'lucide-react';
+import { Upload, Loader2, CheckCircle2, AlertCircle, Wand2, Download, Image, FileSpreadsheet, Users } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const normalize = (value) => String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 const TEMPLATE_PATH = '/templates/mpassword-import-template.xlsx';
+const DEFAULT_IMPORT_PERMISSION = 'view';
+
+const groupMemberRoleLabels = {
+  manager: 'Gestor',
+  admin: 'Gestor',
+  member: 'Membro'
+};
 
 const columnAliases = {
   title: ['titulo', 'título', 'nome', 'name', 'title', 'acesso', 'servico', 'serviço', 'servico/site', 'sistema', 'ferramenta', 'plataforma'],
@@ -156,11 +163,8 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
   const { logAction } = useAuditLog();
   const [rows, setRows] = useState([]);
   const [errors, setErrors] = useState([]);
-  const [availableUsers, setAvailableUsers] = useState([]);
   const [availableGroups, setAvailableGroups] = useState([]);
-  const [selectedUsers, setSelectedUsers] = useState([]);
   const [selectedGroups, setSelectedGroups] = useState([]);
-  const [permissionLevel, setPermissionLevel] = useState('view');
   const [loading, setLoading] = useState(false);
   const [showTemplatePreview, setShowTemplatePreview] = useState(false);
 
@@ -173,12 +177,37 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
 
   const fetchTargets = async () => {
     if (!user?.id) return;
-    const [usersResult, groupsResult] = await Promise.all([
-      supabase.from('profiles').select('id, email, full_name').eq('is_active', true).neq('id', user.id).order('email'),
-      supabase.from('groups').select('id, name').order('name'),
+    const [groupsResult, membersResult] = await Promise.all([
+      supabase.from('groups').select('id, name, description').order('name'),
+      supabase
+        .from('group_members')
+        .select('group_id, role, profiles:user_id(email, full_name)')
+        .order('added_at', { ascending: true }),
     ]);
-    if (!usersResult.error) setAvailableUsers(usersResult.data || []);
-    if (!groupsResult.error) setAvailableGroups(groupsResult.data || []);
+
+    if (groupsResult.error) {
+      toast({ variant: 'destructive', title: 'Erro ao carregar grupos', description: groupsResult.error.message });
+      return;
+    }
+
+    const membersByGroupId = new Map();
+    if (!membersResult.error) {
+      (membersResult.data || []).forEach((member) => {
+        const currentMembers = membersByGroupId.get(member.group_id) || [];
+        currentMembers.push({
+          name: member.profiles?.full_name || member.profiles?.email || 'Usuario sem nome',
+          email: member.profiles?.email || '',
+          role: groupMemberRoleLabels[member.role] || 'Membro',
+        });
+        membersByGroupId.set(member.group_id, currentMembers);
+      });
+    }
+
+    setAvailableGroups((groupsResult.data || []).map((group) => ({
+      ...group,
+      members: membersByGroupId.get(group.id) || [],
+      membersLoaded: !membersResult.error,
+    })));
   };
 
   useEffect(() => { if (isOpen) fetchTargets(); }, [isOpen, user?.id]);
@@ -186,9 +215,7 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
   const reset = () => {
     setRows([]);
     setErrors([]);
-    setSelectedUsers([]);
     setSelectedGroups([]);
-    setPermissionLevel('view');
     setShowTemplatePreview(false);
   };
 
@@ -242,10 +269,18 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
       const { data, error } = await supabase
         .from('groups')
         .insert(missingNames.map((name) => ({ name, description: 'Criado automaticamente na importacao de senhas.', created_by: user.id })))
-        .select('id, name');
+        .select('id, name, description');
       if (error) throw error;
       (data || []).forEach((group) => groupMap.set(normalize(group.name), group));
-      setAvailableGroups((current) => [...current, ...(data || [])].sort((a, b) => a.name.localeCompare(b.name)));
+      setAvailableGroups((current) => [
+        ...current,
+        ...(data || []).map((group) => ({
+          ...group,
+          description: group.description || 'Criado automaticamente na importacao de acessos.',
+          members: [],
+          membersLoaded: true,
+        }))
+      ].sort((a, b) => a.name.localeCompare(b.name)));
     }
 
     return groupMap;
@@ -265,7 +300,7 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
     let insertedSecrets = [];
     try {
       const groupMap = await ensureGroups();
-      const hasSharedAccess = selectedUsers.length > 0 || selectedGroups.length > 0 || groupsFromRows.length > 0;
+      const hasSharedAccess = selectedGroups.length > 0 || groupsFromRows.length > 0;
       const payloads = await Promise.all(validRows.map(async (row) => ({
         owner_id: user.id,
         title: row.title.trim(),
@@ -288,8 +323,13 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
         const rowGroupIds = row.groupNames.map((name) => groupMap.get(normalize(name))?.id).filter(Boolean);
         const groupIds = Array.from(new Set([...selectedGroups, ...rowGroupIds]));
 
-        selectedUsers.forEach((userId) => permissionPayloads.push({ secret_id: secret.id, granted_to_user_id: userId, granted_to_group_id: null, permission_level: permissionLevel, granted_by_id: user.id }));
-        groupIds.forEach((groupId) => permissionPayloads.push({ secret_id: secret.id, granted_to_user_id: null, granted_to_group_id: groupId, permission_level: permissionLevel, granted_by_id: user.id }));
+        groupIds.forEach((groupId) => permissionPayloads.push({
+          secret_id: secret.id,
+          granted_to_user_id: null,
+          granted_to_group_id: groupId,
+          permission_level: DEFAULT_IMPORT_PERMISSION,
+          granted_by_id: user.id
+        }));
       });
 
       if (permissionPayloads.length > 0) {
@@ -297,7 +337,7 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
         if (permissionsError) throw permissionsError;
       }
 
-      await logAction('import_secrets', 'import', insertedSecrets[0]?.id, { total: insertedSecrets.length, users: selectedUsers.length, groups: selectedGroups.length + groupsFromRows.length, permission: permissionLevel });
+      await logAction('import_secrets', 'import', insertedSecrets[0]?.id, { total: insertedSecrets.length, groups: selectedGroups.length + groupsFromRows.length, permission: DEFAULT_IMPORT_PERMISSION });
       toast({ title: 'Importacao concluida', description: `${insertedSecrets.length} senha(s) importada(s).` });
       onSuccess?.();
       handleClose();
@@ -310,6 +350,7 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
   };
 
   return (
+    <TooltipProvider delayDuration={150}>
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Importar acessos por planilha</DialogTitle></DialogHeader>
@@ -438,30 +479,70 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
             </div>
           </>}
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Usuarios com acesso em todas as senhas</Label>
-              <div className="max-h-40 overflow-auto rounded-md border border-gray-200 p-2">
-                {availableUsers.length === 0 ? <p className="px-2 py-3 text-sm text-gray-500">Nenhum usuario disponivel.</p> : availableUsers.map((target) => <label key={target.id} className="flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-gray-50"><input type="checkbox" checked={selectedUsers.includes(target.id)} onChange={() => toggleSelection(target.id, setSelectedUsers)} /><span>{target.full_name || target.email}</span></label>)}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div>
                 <Label>Grupos com acesso em todas as senhas</Label>
-                {rows.length > 0 && <Button type="button" variant="outline" size="sm" onClick={applySelectedGroupsToRows}><Wand2 className="mr-2 h-4 w-4" /> Aplicar nas linhas</Button>}
+                <p className="mt-1 text-xs text-gray-500">Use esta lista quando todos os acessos importados pertencerem ao mesmo grupo. A permissao padrao da importacao e visualizar.</p>
               </div>
-              <div className="max-h-40 overflow-auto rounded-md border border-gray-200 p-2">
-                {availableGroups.length === 0 ? <p className="px-2 py-3 text-sm text-gray-500">Nenhum grupo disponivel.</p> : availableGroups.map((group) => <label key={group.id} className="flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-gray-50"><input type="checkbox" checked={selectedGroups.includes(group.id)} onChange={() => toggleSelection(group.id, setSelectedGroups)} /><span>{group.name}</span></label>)}
-              </div>
-              <p className="text-xs text-gray-500">Voce tambem pode digitar grupos diferentes diretamente em cada linha da tabela.</p>
+              {rows.length > 0 && <Button type="button" variant="outline" size="sm" onClick={applySelectedGroupsToRows}><Wand2 className="mr-2 h-4 w-4" /> Aplicar nas linhas</Button>}
             </div>
+            <div className="max-h-52 overflow-auto rounded-md border border-gray-200 p-2">
+              {availableGroups.length === 0 ? (
+                <p className="px-2 py-3 text-sm text-gray-500">Nenhum grupo disponivel.</p>
+              ) : availableGroups.map((group) => (
+                <label key={group.id} className="flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-gray-50">
+                  <input
+                    type="checkbox"
+                    checked={selectedGroups.includes(group.id)}
+                    onChange={() => toggleSelection(group.id, setSelectedGroups)}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <Users className="h-4 w-4 text-gray-400" />
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="cursor-help underline decoration-dotted decoration-gray-300 underline-offset-4">{group.name}</span>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-sm">
+                      <div className="space-y-2">
+                        <p className="font-medium text-gray-900">{group.name}</p>
+                        {group.description ? (
+                          <p className="rounded-md bg-gray-50 p-2 text-xs leading-relaxed text-gray-700">{group.description}</p>
+                        ) : (
+                          <p className="text-xs text-gray-500">Sem descricao cadastrada para este grupo.</p>
+                        )}
+                        <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Usuarios com acesso</p>
+                        {!group.membersLoaded ? (
+                          <p className="text-xs text-gray-600">Nao foi possivel carregar os membros deste grupo agora.</p>
+                        ) : group.members.length === 0 ? (
+                          <p className="text-xs text-gray-600">Nenhum usuario neste grupo.</p>
+                        ) : (
+                          <div className="space-y-1">
+                            {group.members.slice(0, 8).map((member) => (
+                              <div key={`${group.id}-${member.email || member.name}`} className="text-xs leading-relaxed">
+                                <span className="font-medium text-gray-800">{member.name}</span>
+                                {member.email && member.email !== member.name && <span className="text-gray-500"> - {member.email}</span>}
+                                <span className="text-gray-400"> ({member.role})</span>
+                              </div>
+                            ))}
+                            {group.members.length > 8 && (
+                              <p className="text-xs text-gray-500">+{group.members.length - 8} usuario(s)</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500">Voce tambem pode digitar grupos diferentes diretamente em cada linha da tabela.</p>
           </div>
-
-          <div className="space-y-2"><Label>Nivel de permissao para os acessos selecionados</Label><Select value={permissionLevel} onValueChange={setPermissionLevel}><SelectTrigger className="max-w-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="view">Visualizar</SelectItem><SelectItem value="edit">Editar</SelectItem><SelectItem value="manage_access">Gerenciar acessos</SelectItem></SelectContent></Select></div>
         </div>
         <DialogFooter><Button type="button" variant="outline" onClick={handleClose} disabled={loading}>Cancelar</Button><Button onClick={handleImport} disabled={loading || validRows.length === 0 || overImportLimit} className="bg-blue-600 text-white hover:bg-blue-700">{loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Importando...</> : <><Upload className="mr-2 h-4 w-4" /> Importar acessos</>}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
+    </TooltipProvider>
   );
 };
 
