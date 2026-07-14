@@ -339,7 +339,14 @@ const ImportSecretsModal = ({ isOpen, onClose, onSuccess }) => {
       }
 
       await logAction('import_secrets', 'import', insertedSecrets[0]?.id, { total: insertedSecrets.length, groups: selectedGroups.length + groupsFromRows.length, permission: DEFAULT_IMPORT_PERMISSION });
-      toast({ title: 'Importacao concluida', description: `${insertedSecrets.length} senha(s) importada(s).` });
+      const groupSummary = Array.from(new Set(groupsFromRows)).slice(0, 3).join(', ');
+      toast({
+        title: `✅ ${insertedSecrets.length} acesso(s) importado(s) com sucesso`,
+        description: groupSummary
+          ? `Foram adicionados ao grupo "${groupSummary}". Encontre-os em Acessos e filtre por esse grupo.`
+          : 'Encontre-os em Acessos (aba "Todos os acessos").',
+        duration: 10000,
+      });
       onSuccess?.();
       handleClose();
     } catch (err) {

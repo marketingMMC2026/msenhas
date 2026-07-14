@@ -30,6 +30,8 @@ const VaultPage = () => {
   const [auditSecrets, setAuditSecrets] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState(null);
+  const [lastAccessMap, setLastAccessMap] = useState(null);
+  const [groups, setGroups] = useState([]);
   const isAuditMode = Boolean(auditUserId);
   const selectedAuditUser = useMemo(() => auditUsers.find((auditUser) => auditUser.id === auditUserId) || null, [auditUserId, auditUsers]);
 
@@ -92,6 +94,46 @@ const VaultPage = () => {
     fetchAuditedAccesses();
     return () => { cancelled = true; };
   }, [auditUserId]);
+
+  // Gestão de admin/manager: mapa de último acesso (via RPC) + grupos (p/ mover em massa).
+  useEffect(() => {
+    let cancelled = false;
+    if (!can('manageUsers')) return;
+
+    const loadManagementData = async () => {
+      const [{ data: accessData, error: accessError }, { data: groupData, error: groupError }] = await Promise.all([
+        supabase.rpc('get_secret_last_access'),
+        supabase.from('groups').select('id, name').order('name', { ascending: true }),
+      ]);
+      if (cancelled) return;
+      if (accessError) {
+        console.warn('Não foi possível carregar último acesso:', accessError.message);
+      } else {
+        setLastAccessMap(new Map((accessData || []).map((row) => [row.secret_id, row])));
+      }
+      if (!groupError) setGroups(groupData || []);
+    };
+
+    loadManagementData();
+    return () => { cancelled = true; };
+  }, [can]);
+
+  const handleBulkAction = async (action, ids, value) => {
+    try {
+      const { data, error } = await supabase.rpc('bulk_manage_secrets', {
+        p_ids: ids,
+        p_action: action,
+        p_value: value ?? null,
+      });
+      if (error) throw error;
+      const labels = { archive: 'arquivado(s)', unarchive: 'desarquivado(s)', add_tag: 'com tag adicionada', remove_tag: 'com tag removida', add_group: 'movido(s) para o grupo' };
+      toast({ title: 'Ação em massa concluída', description: `${data} acesso(s) ${labels[action] || 'atualizado(s)'}.` });
+      refresh();
+    } catch (err) {
+      const formattedError = handleSupabaseError(err, 'Bulk Action');
+      toast({ title: 'Erro na ação em massa', description: formattedError.message, variant: 'destructive' });
+    }
+  };
 
   const closeModal = () => setModalState({ type: null, data: null });
   const handleCreate = () => {
@@ -239,7 +281,7 @@ const VaultPage = () => {
           </div>
         )}
         {(isAuditMode ? auditError : error) && <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg flex items-center justify-between"><div className="flex items-center gap-2"><AlertCircle className="h-5 w-5" /><span>{t('loadPasswordsError')}: {isAuditMode ? auditError : error}</span></div><Button variant="ghost" size="sm" onClick={isAuditMode ? () => setAuditUserId('') : refresh} className="text-red-700 hover:bg-red-100">{isAuditMode ? 'Voltar' : t('retry')}</Button></div>}
-        <SecretTable secrets={isAuditMode ? auditSecrets : secrets} loading={isAuditMode ? auditLoading : loading} showArchived={showArchived} onShowArchivedChange={setShowArchived} onView={handleView} onEdit={handleEdit} onShare={handleShare} onArchive={handleArchiveClick} onRestore={handleRestore} auditMode={isAuditMode} auditUser={selectedAuditUser} />
+        <SecretTable secrets={isAuditMode ? auditSecrets : secrets} loading={isAuditMode ? auditLoading : loading} showArchived={showArchived} onShowArchivedChange={setShowArchived} onView={handleView} onEdit={handleEdit} onShare={handleShare} onArchive={handleArchiveClick} onRestore={handleRestore} auditMode={isAuditMode} auditUser={selectedAuditUser} lastAccessMap={lastAccessMap} groups={groups} onBulkAction={handleBulkAction} />
         <SecretModal isOpen={modalState.type === 'create' || modalState.type === 'edit'} onClose={closeModal} secret={modalState.data} onSuccess={handleSuccess} />
         <SecretViewModal isOpen={modalState.type === 'view'} onClose={closeModal} secret={modalState.data} onEdit={() => handleEdit(modalState.data)} onShare={() => handleShare(modalState.data)} onArchive={() => handleArchiveClick(modalState.data)} onRestore={() => handleRestore(modalState.data)} />
         <ShareSecretModal isOpen={modalState.type === 'share'} onClose={closeModal} secret={modalState.data} />
