@@ -19,12 +19,13 @@ export const useAuditLog = () => {
         logged_at: new Date().toISOString(),
       };
 
-      const { error } = await supabase.from('audit_logs').insert({
-        user_id: user.id,
-        action,
-        resource_type: resourceType,
-        resource_id: resourceId,
-        details: context,
+      // Via RPC SECURITY DEFINER: o servidor fixa user_id := auth.uid()
+      // (o client não consegue forjar autoria — ver A2).
+      const { error } = await supabase.rpc('log_audit_event', {
+        p_action: action,
+        p_resource_type: resourceType,
+        p_resource_id: resourceId,
+        p_details: context,
       });
 
       if (error) {

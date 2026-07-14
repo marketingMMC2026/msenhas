@@ -292,12 +292,11 @@ export const AuthProvider = ({ children }) => {
   const logSessionTimeout = useCallback(async () => {
     if (!user?.id) return;
     try {
-      await supabase.from('audit_logs').insert({
-        user_id: user.id,
-        action: 'session_timeout',
-        resource_type: 'auth',
-        resource_id: user.id,
-        details: {
+      await supabase.rpc('log_audit_event', {
+        p_action: 'session_timeout',
+        p_resource_type: 'auth',
+        p_resource_id: user.id,
+        p_details: {
           reason: 'idle_timeout',
           idle_minutes: 30,
           page_path: window.location.pathname,
