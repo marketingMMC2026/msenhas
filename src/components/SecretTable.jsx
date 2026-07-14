@@ -68,14 +68,23 @@ const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onV
     setVisibleLimit(pageSize);
   }, [pageSize, scope, search, selectedGroup, selectedTag, showArchived]);
 
-  const filteredSecrets = useMemo(() => scopedSecrets.filter(secret => {
-    if (Boolean(secret.is_archived) !== showArchived) return false;
-    const searchLower = search.toLowerCase();
-    const matchesSearch = !searchLower || secret.title.toLowerCase().includes(searchLower) || (secret.login && secret.login.toLowerCase().includes(searchLower)) || (secret.link && secret.link.toLowerCase().includes(searchLower));
-    const matchesGroup = !selectedGroup || secret.group_names?.includes(selectedGroup);
-    const matchesTag = !selectedTag || secret.tags?.includes(selectedTag);
-    return matchesSearch && matchesGroup && matchesTag;
-  }), [scopedSecrets, search, selectedGroup, selectedTag, showArchived]);
+  const filteredSecrets = useMemo(() => {
+    const searchLower = search.trim().toLowerCase();
+    // Ao buscar, procura em TODOS os acessos visíveis (não só na aba selecionada),
+    // para que a busca encontre tudo de uma vez. Sem busca, respeita a aba (Meus/Todos).
+    const base = searchLower ? visibleSecretsByPrivacy : scopedSecrets;
+    return base.filter(secret => {
+      if (Boolean(secret.is_archived) !== showArchived) return false;
+      const matchesSearch = !searchLower
+        || secret.title.toLowerCase().includes(searchLower)
+        || (secret.login && secret.login.toLowerCase().includes(searchLower))
+        || (secret.link && secret.link.toLowerCase().includes(searchLower))
+        || (Array.isArray(secret.tags) && secret.tags.some(tag => tag.toLowerCase().includes(searchLower)));
+      const matchesGroup = !selectedGroup || secret.group_names?.includes(selectedGroup);
+      const matchesTag = !selectedTag || secret.tags?.includes(selectedTag);
+      return matchesSearch && matchesGroup && matchesTag;
+    });
+  }, [scopedSecrets, visibleSecretsByPrivacy, search, selectedGroup, selectedTag, showArchived]);
 
   const visibleSecrets = useMemo(() => filteredSecrets.slice(0, visibleLimit), [filteredSecrets, visibleLimit]);
   const canLoadMore = visibleLimit < filteredSecrets.length;

@@ -62,6 +62,40 @@ const readBody = (request) => {
   return request.body;
 };
 
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
+const APP_URL = process.env.VITE_APP_URL || 'https://mpassword.app';
+
+// A1 — Autoriza a chamada: exige JWT válido do Supabase e papel admin/manager.
+// Usa o próprio token do usuário (não expõe service_role): valida a identidade em
+// /auth/v1/user e lê o próprio perfil via PostgREST (RLS permite o self-read).
+const authorizeManager = async (request) => {
+  const header = request.headers.authorization || request.headers.Authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  if (!token) return { ok: false, status: 401, error: 'Authentication required.' };
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return { ok: false, status: 500, error: 'Supabase environment is not configured.' };
+  }
+
+  const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+  });
+  if (!userRes.ok) return { ok: false, status: 401, error: 'Invalid or expired session.' };
+  const user = await userRes.json();
+  if (!user || !user.id) return { ok: false, status: 401, error: 'Invalid session.' };
+
+  const profRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=is_admin,role,is_active`,
+    { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` } },
+  );
+  const rows = profRes.ok ? await profRes.json() : [];
+  const profile = rows[0];
+  const allowed = profile && profile.is_active === true
+    && (profile.is_admin === true || profile.role === 'admin' || profile.role === 'manager');
+  if (!allowed) return { ok: false, status: 403, error: 'Not authorized to send invitations.' };
+  return { ok: true, user };
+};
+
 export default async function handler(request, response) {
   if (request.method !== 'POST') {
     return response.status(405).json({ error: 'Method not allowed.' });
@@ -69,6 +103,11 @@ export default async function handler(request, response) {
 
   if (!process.env.RESEND_API_KEY) {
     return response.status(500).json({ error: 'RESEND_API_KEY is not configured in Vercel.' });
+  }
+
+  const auth = await authorizeManager(request);
+  if (!auth.ok) {
+    return response.status(auth.status).json({ error: auth.error });
   }
 
   try {
@@ -83,7 +122,10 @@ export default async function handler(request, response) {
       return response.status(400).json({ error: 'Invalid email address.' });
     }
 
-    if (!inviteUrl || !inviteUrl.startsWith('https://')) {
+    // Só aceita link do próprio app (evita usar a marca/reputação p/ phishing).
+    let inviteHost = '';
+    try { inviteHost = new URL(inviteUrl).host; } catch { inviteHost = ''; }
+    if (!inviteHost || inviteHost !== new URL(APP_URL).host) {
       return response.status(400).json({ error: 'Invalid invitation link.' });
     }
 
