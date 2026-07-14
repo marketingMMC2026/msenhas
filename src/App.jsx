@@ -1,23 +1,33 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import ScrollToTop from '@/components/ScrollToTop';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import ProtectedCapabilityRoute from '@/components/ProtectedCapabilityRoute';
 import AppShell from '@/components/AppShell';
+import LoadingSpinner from '@/components/LoadingSpinner';
+// Entrada (não-autenticada) fica eager; o resto carrega sob demanda (code-splitting).
 import LoginPage from '@/pages/LoginPage';
 import AuthCallback from '@/pages/AuthCallback';
-import DashboardPage from '@/pages/DashboardPage';
-import VaultPage from '@/pages/VaultPage';
-import RequestsPage from '@/pages/RequestsPage';
-import GroupsPage from '@/pages/GroupsPage';
-import UsersPage from '@/pages/UsersPage';
-import LogsPage from '@/pages/LogsPage';
-import SettingsPage from '@/pages/SettingsPage';
+
+const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
+const VaultPage = lazy(() => import('@/pages/VaultPage'));
+const RequestsPage = lazy(() => import('@/pages/RequestsPage'));
+const GroupsPage = lazy(() => import('@/pages/GroupsPage'));
+const UsersPage = lazy(() => import('@/pages/UsersPage'));
+const LogsPage = lazy(() => import('@/pages/LogsPage'));
+const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
+
+const RouteFallback = () => (
+  <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <LoadingSpinner size="lg" message="Carregando..." />
+  </div>
+);
 
 function App() {
   return (
     <BrowserRouter>
       <ScrollToTop />
+      <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
@@ -60,6 +70,7 @@ function App() {
           } />
         </Route>
       </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

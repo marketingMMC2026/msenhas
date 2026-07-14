@@ -10,7 +10,7 @@ import { useAuditLog } from '@/hooks/useAuditLog';
 import { encryptSecretText } from '@/lib/secretCrypto';
 import { getPasswordStrength } from '@/lib/accessUtils';
 import { Upload, Loader2, CheckCircle2, AlertCircle, Wand2, Download, Image, FileSpreadsheet, Users } from 'lucide-react';
-import * as XLSX from 'xlsx';
+// xlsx é carregado sob demanda (import dinâmico) só ao processar planilha — mantém o bundle inicial leve.
 
 const normalize = (value) => String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 const TEMPLATE_PATH = '/templates/mpassword-import-template.xlsx';
@@ -150,6 +150,7 @@ const parseCsv = (content) => {
 };
 
 const parseExcelFile = async (file) => {
+  const XLSX = await import('xlsx');
   const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: false });
   const firstSheetName = workbook.SheetNames[0];
   if (!firstSheetName) return { rows: [], errors: ['Nao encontrei nenhuma aba na planilha.'] };
