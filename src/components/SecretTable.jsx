@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Search, ExternalLink, Edit2, Archive, RotateCcw, Share2, Eye, MoreHorizontal, Lock, Users, ShieldQuestion, Tag as TagIcon, FolderInput, Clock, X, Loader2 } from 'lucide-react';
+import { Search, ExternalLink, Edit2, Archive, RotateCcw, Share2, Eye, MoreHorizontal, Lock, Users, ShieldQuestion, Tag as TagIcon, FolderInput, Clock, X, Loader2, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -48,6 +48,9 @@ const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onV
   const [selectedGroup, setSelectedGroup] = useState('');
   const [selectedTag, setSelectedTag] = useState('');
   const [lastAccessFilter, setLastAccessFilter] = useState('');
+  const [selectedStrength, setSelectedStrength] = useState('');
+  const [selectedType, setSelectedType] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
   const [pageSize, setPageSize] = useState(30);
   const [visibleLimit, setVisibleLimit] = useState(30);
   const [selected, setSelected] = useState(() => new Set());
@@ -78,7 +81,7 @@ const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onV
 
   useEffect(() => {
     setVisibleLimit(pageSize);
-  }, [pageSize, scope, search, selectedGroup, selectedTag, lastAccessFilter, showArchived]);
+  }, [pageSize, scope, search, selectedGroup, selectedTag, selectedStrength, selectedType, lastAccessFilter, showArchived]);
 
   const matchesLastAccess = (secret) => {
     if (!lastAccessFilter) return true;
@@ -103,10 +106,17 @@ const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onV
         || (Array.isArray(secret.tags) && secret.tags.some(tag => tag.toLowerCase().includes(searchLower)));
       const matchesGroup = !selectedGroup || secret.group_names?.includes(selectedGroup);
       const matchesTag = !selectedTag || secret.tags?.includes(selectedTag);
-      return matchesSearch && matchesGroup && matchesTag && matchesLastAccess(secret);
+      const matchesStrength = !selectedStrength
+        || (selectedStrength === 'none' ? !secret.password_strength : secret.password_strength === selectedStrength);
+      const matchesType = !selectedType
+        || (selectedType === 'personal' ? secret.is_personal : !secret.is_personal);
+      return matchesSearch && matchesGroup && matchesTag && matchesStrength && matchesType && matchesLastAccess(secret);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopedSecrets, visibleSecretsByPrivacy, search, selectedGroup, selectedTag, lastAccessFilter, showArchived, lastAccessMap]);
+  }, [scopedSecrets, visibleSecretsByPrivacy, search, selectedGroup, selectedTag, selectedStrength, selectedType, lastAccessFilter, showArchived, lastAccessMap]);
+
+  const advancedFilters = [selectedGroup, selectedTag, selectedStrength, selectedType, lastAccessFilter].filter(Boolean).length;
+  const clearAllFilters = () => { setSelectedGroup(''); setSelectedTag(''); setSelectedStrength(''); setSelectedType(''); setLastAccessFilter(''); };
 
   // ids atualmente filtrados (para "selecionar todos")
   const filteredIds = useMemo(() => filteredSecrets.filter(s => !s.is_catalog_only).map(s => s.id), [filteredSecrets]);
@@ -175,27 +185,57 @@ const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onV
           )}
           {showArchived && <button type="button" onClick={() => onShowArchivedChange(false)} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100">Voltar para ativos</button>}
         </div>
-        <div className="grid w-full gap-3 md:grid-cols-[minmax(260px,1fr)_minmax(220px,280px)_minmax(180px,240px)]">
-          <div className="relative min-w-0"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" /><input type="text" placeholder="Buscar acessos..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
-          <select value={selectedGroup} onChange={(e) => setSelectedGroup(e.target.value)} className="min-w-0 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="">Todos os grupos</option>
-            {allGroups.map(group => <option key={group} value={group}>{group}</option>)}
-          </select>
-          <select value={selectedTag} onChange={(e) => setSelectedTag(e.target.value)} className="min-w-0 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="">Todas as tags</option>
-            {allTags.map(tag => <option key={tag} value={tag}>{tag}</option>)}
-          </select>
+        {/* Busca sempre visível + botão para abrir/fechar os filtros avançados */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[240px] flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" /><input type="text" placeholder="Buscar acessos..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+          <button type="button" onClick={() => setShowFilters(v => !v)} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium ${showFilters || advancedFilters ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'}`}>
+            <SlidersHorizontal className="h-4 w-4" /> Filtros
+            {advancedFilters > 0 && <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 text-xs font-semibold text-white">{advancedFilters}</span>}
+          </button>
+          {advancedFilters > 0 && <button type="button" onClick={clearAllFilters} className="text-sm font-medium text-blue-600 hover:text-blue-800">Limpar</button>}
         </div>
-        {showLastAccess && (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-500"><Clock className="h-3.5 w-3.5" /> Último acesso:</span>
-            <select value={lastAccessFilter} onChange={(e) => setLastAccessFilter(e.target.value)} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="">Qualquer</option>
-              <option value="never">Nunca acessado</option>
-              <option value="30">Há mais de 30 dias</option>
-              <option value="60">Há mais de 60 dias</option>
-              <option value="90">Há mais de 90 dias</option>
-            </select>
+
+        {showFilters && (
+          <div className="grid gap-3 rounded-lg border border-gray-200 bg-gray-50/60 p-3 sm:grid-cols-2 lg:grid-cols-3">
+            <label className="flex flex-col gap-1 text-xs font-medium text-gray-500">Grupo
+              <select value={selectedGroup} onChange={(e) => setSelectedGroup(e.target.value)} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">Todos os grupos</option>
+                {allGroups.map(group => <option key={group} value={group}>{group}</option>)}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium text-gray-500">Tag
+              <select value={selectedTag} onChange={(e) => setSelectedTag(e.target.value)} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">Todas as tags</option>
+                {allTags.map(tag => <option key={tag} value={tag}>{tag}</option>)}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium text-gray-500">Força da senha
+              <select value={selectedStrength} onChange={(e) => setSelectedStrength(e.target.value)} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">Qualquer</option>
+                <option value="strong">Forte</option>
+                <option value="medium">Média</option>
+                <option value="weak">Fraca</option>
+                <option value="none">Não avaliada</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium text-gray-500">Tipo
+              <select value={selectedType} onChange={(e) => setSelectedType(e.target.value)} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">Todos</option>
+                <option value="shared">Compartilhada</option>
+                <option value="personal">Particular</option>
+              </select>
+            </label>
+            {showLastAccess && (
+              <label className="flex flex-col gap-1 text-xs font-medium text-gray-500"><span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> Último acesso</span>
+                <select value={lastAccessFilter} onChange={(e) => setLastAccessFilter(e.target.value)} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">Qualquer</option>
+                  <option value="never">Nunca acessado</option>
+                  <option value="30">Há mais de 30 dias</option>
+                  <option value="60">Há mais de 60 dias</option>
+                  <option value="90">Há mais de 90 dias</option>
+                </select>
+              </label>
+            )}
           </div>
         )}
       </div>
@@ -230,7 +270,7 @@ const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onV
 
       <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-gray-500">
         <span>Mostrando {Math.min(visibleSecrets.length, filteredSecrets.length)} de {filteredSecrets.length} acessos filtrados.</span>
-        {(selectedGroup || selectedTag || search) && <button type="button" onClick={() => { setSearch(''); setSelectedGroup(''); setSelectedTag(''); }} className="font-medium text-blue-600 hover:text-blue-800">Limpar filtros</button>}
+        {(advancedFilters > 0 || search) && <button type="button" onClick={() => { setSearch(''); clearAllFilters(); }} className="font-medium text-blue-600 hover:text-blue-800">Limpar filtros</button>}
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
