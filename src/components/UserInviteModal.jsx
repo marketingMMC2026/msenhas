@@ -75,9 +75,17 @@ const UserInviteModal = ({ open, onOpenChange, onSuccess }) => {
   const buildInviteUrl = (targetEmail) => `${getAppOrigin()}/login?invite=${encodeURIComponent(targetEmail)}`;
 
   const sendInviteEmail = async (targetEmail) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token;
+    if (!accessToken) {
+      throw new Error('Sessão expirada. Entre novamente para enviar convites.');
+    }
     const response = await fetch('/api/send-invite', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
       body: JSON.stringify({
         email: targetEmail,
         fullName: fullName.trim(),

@@ -51,7 +51,10 @@ const deriveKey = async (salt) => {
 
 export const encryptSecretText = async (plainText) => {
   if (!plainText) return plainText;
-  if (!isSecretEncryptionConfigured()) return plainText;
+  // M5 — falha fechado: nunca gravar segredo em texto puro por falta de chave.
+  if (!isSecretEncryptionConfigured()) {
+    throw new Error('Chave de criptografia ausente. Configure VITE_SECRET_ENCRYPTION_KEY antes de salvar segredos.');
+  }
 
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
