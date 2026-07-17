@@ -126,7 +126,7 @@ const VaultPage = () => {
         p_value: value ?? null,
       });
       if (error) throw error;
-      const labels = { archive: 'arquivado(s)', unarchive: 'desarquivado(s)', add_tag: 'com tag adicionada', remove_tag: 'com tag removida', add_group: 'movido(s) para o grupo' };
+      const labels = { archive: 'arquivado(s)', unarchive: 'desarquivado(s)', add_tag: 'com tag adicionada', remove_tag: 'com tag removida', add_group: 'compartilhado(s) com o grupo (ver)', add_group_edit: 'compartilhado(s) com o grupo (editar)' };
       toast({ title: 'Ação em massa concluída', description: `${data} acesso(s) ${labels[action] || 'atualizado(s)'}.` });
       refresh();
     } catch (err) {
