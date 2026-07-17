@@ -56,6 +56,7 @@ const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onV
   const [selected, setSelected] = useState(() => new Set());
   const [bulkTag, setBulkTag] = useState('');
   const [bulkGroup, setBulkGroup] = useState('');
+  const [bulkGroupLevel, setBulkGroupLevel] = useState('view');
   const [bulkBusy, setBulkBusy] = useState(false);
 
   // Gestão em massa disponível para quem pode gerenciar pessoas/acessos (admin/manager) e há handler.
@@ -259,10 +260,14 @@ const SecretTable = ({ secrets, loading, showArchived, onShowArchivedChange, onV
             <span className="inline-flex items-center gap-1">
               <FolderInput className="h-3.5 w-3.5 text-gray-500" />
               <select value={bulkGroup} onChange={(e) => setBulkGroup(e.target.value)} className="rounded-md border border-gray-200 bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="">mover p/ grupo…</option>
+                <option value="">compartilhar c/ grupo…</option>
                 {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
               </select>
-              <button type="button" disabled={bulkBusy || !bulkGroup} onClick={() => runBulk('add_group', bulkGroup)} className="rounded-md border border-gray-200 bg-white px-2 py-1 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40">aplicar</button>
+              <select value={bulkGroupLevel} onChange={(e) => setBulkGroupLevel(e.target.value)} className="rounded-md border border-gray-200 bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" title="Nível de acesso concedido ao grupo">
+                <option value="view">Ver</option>
+                <option value="edit">Editar</option>
+              </select>
+              <button type="button" disabled={bulkBusy || !bulkGroup} onClick={() => runBulk(bulkGroupLevel === 'edit' ? 'add_group_edit' : 'add_group', bulkGroup)} className="rounded-md border border-gray-200 bg-white px-2 py-1 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40">aplicar</button>
             </span>
           )}
         </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { X, Loader2, Trash2, Shield, User, Plus } from 'lucide-react';
+import { X, Loader2, Trash2, Shield, User, Plus, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
 import { useAuditLog } from '@/hooks/useAuditLog';
@@ -166,6 +166,14 @@ const GroupMembersModal = ({ open, onOpenChange, group }) => {
             </div>
 
             <div className="p-6 overflow-y-auto flex-1">
+              <div className="mb-6 flex gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+                <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                <div className="space-y-1">
+                  <p><strong className="text-gray-800">Membro:</strong> participa do grupo e recebe os acessos compartilhados com ele.</p>
+                  <p><strong className="text-gray-800">Gestor do grupo:</strong> tudo do Membro + pode adicionar, remover e mudar o papel das pessoas <em>deste grupo</em>.</p>
+                  <p className="text-gray-500">⚠️ O papel no grupo <strong>não</strong> define quem edita as senhas. Editar depende do <strong>nível de conta</strong> (Editor ou acima) e de a senha ter sido compartilhada no nível <strong>“Editar”</strong>.</p>
+                </div>
+              </div>
               <div className="mb-8 p-4 bg-blue-50 rounded-lg border border-blue-100">
                 <h3 className="text-sm font-semibold text-blue-900 mb-3 flex items-center gap-2">
                   <Plus className="h-4 w-4" /> Adicionar membro

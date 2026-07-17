@@ -11,8 +11,8 @@ import { Info, MailPlus, Users as UsersIcon } from 'lucide-react';
 
 const roleOptions = [
   { value: 'admin', label: 'Admin do sistema', description: 'Gerencia usuarios, grupos e senhas da agencia.' },
-  { value: 'manager', label: 'Gestor', description: 'Convida usuarios, gerencia grupos, ve logs e organiza acessos. Nao importa senhas.' },
-  { value: 'editor', label: 'Editor', description: 'Cria e edita senhas permitidas.' },
+  { value: 'manager', label: 'Gestor', description: 'Convida usuarios, gerencia grupos, ve logs, organiza e importa acessos (ate 50 por vez). Nao altera configuracoes globais nem administradores.' },
+  { value: 'editor', label: 'Editor', description: 'Cria e importa senhas (ate 50). Edita as que criou e as compartilhadas com permissao de editar. Nao arquiva.' },
   { value: 'viewer', label: 'Visualizador', description: 'Apenas visualiza senhas compartilhadas.' },
 ];
 
